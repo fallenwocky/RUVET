@@ -158,7 +158,7 @@ function finalBlocks(out) {
 // ---------- lint: deterministic checks against the target pack's syntax ----------
 function lint(target, pos, neg, meta) {
   const pack = targetInfo(target).pack, L = [], low = pos.toLowerCase();
-  const add = (lv, m) => L.push({ lv, m });
+  const add = (lv, m, cat = 'dialect') => L.push({ lv, m, cat });
   for (const l of meta?.loras ?? []) {
     const dit = pack !== 'TAG';
     if (l.base === 'sdxl' && dit) add('error', `LoRA "${l.name}" is an SDXL LoRA; it does not run on ${targetInfo(target).label}`);
@@ -172,9 +172,9 @@ function lint(target, pos, neg, meta) {
   const pseudo = found(['perfect anatomy', 'perfect hands', 'correct anatomy', 'detailed hands', 'five fingers', 'anatomically correct']);
   if (pseudo.length) add('error', `Anatomy pseudo-terms do not fix anatomy: ${pseudo.join(', ')}`);
   const filler = found(['ultra detailed', 'ultra-detailed', 'highly detailed', '8k', '4k', 'stunning', 'intricate', 'ornate']);
-  if (filler.length) add('warn', `Quality filler: ${filler.join(', ')}`);
+  if (filler.length) add('warn', `Quality filler: ${filler.join(', ')}`, 'bloat');
   const cliche = found(['bokeh', 'sparkles', 'light particles', 'falling petals', 'lens flare', 'god rays', 'glowing eyes', 'rim light']);
-  if (cliche.length) add('info', `Check these effects have a named source: ${cliche.join(', ')}`);
+  if (cliche.length) add('info', `Check these effects have a named source: ${cliche.join(', ')}`, 'bloat');
   let count;
   if (pack === 'DESCRIPTION') {
     const words = pos.split(/\s+/).filter(Boolean).length; count = `${words} words`;
@@ -185,6 +185,16 @@ function lint(target, pos, neg, meta) {
     if (tagq.length) add('error', `Tag-model quality strings in a description prompt: ${tagq.join(', ')}`);
     const commas = (pos.match(/,/g) || []).length, sentences = (pos.match(/[.!?](\s|$)/g) || []).length;
     if (words > 20 && commas > words * 0.2 && sentences < 3) add('warn', 'Reads like a tag pile — description models want connected sentences');
+    const narr = found(['the image shows', 'this image', 'the scene shows', 'the scene depicts', 'in this scene', 'the artwork', 'the composition features', 'captures the', 'evokes', 'adding to the', 'atmosphere of', 'sense of']);
+    if (narr.length) add('warn', `Narrates instead of describing: ${narr.join(', ')}`, 'bloat');
+    const empty = found(['ethereal', 'mesmerizing', 'captivating', 'breathtaking', 'whimsical', 'dreamlike', 'majestic', 'vibrant', 'exquisite', 'gorgeous', 'beautiful', 'masterfully', 'incredibly', 'extremely', 'very', 'perfect']);
+    if (empty.length) add('warn', `Words with nothing to draw: ${empty.join(', ')}`, 'bloat');
+    const STOP = new Set(['about', 'above', 'across', 'against', 'along', 'around', 'behind', 'below', 'beside', 'between', 'while', 'where', 'which', 'their', 'there', 'these', 'those', 'three', 'through', 'toward', 'towards', 'under', 'light', 'frame', 'slightly', 'almost', 'with', 'from', 'that', 'this', 'into', 'over', 'only', 'left', 'right', 'hand', 'hands']);
+    const freq = {};
+    for (const w of low.match(/[a-z]{4,}/g) ?? []) if (!STOP.has(w)) freq[w] = (freq[w] ?? 0) + 1;
+    const rep = Object.entries(freq).filter(([, n]) => n >= 4).map(([w, n]) => `${w} ×${n}`);
+    if (rep.length) add('warn', `Repeated words: ${rep.join(', ')}`, 'bloat');
+    if (target === 'midjourney' && !/--ar\s+\d+:\d+/.test(pos)) add('info', 'Midjourney: the aspect ratio belongs in the prompt as --ar W:H');
   } else {
     let tagPart = pos, sentences = 0;
     if (pack === 'HYBRID') {
@@ -211,9 +221,30 @@ function lint(target, pos, neg, meta) {
     const posSet = new Set(tags.map((t) => t.toLowerCase().replace(/^\(|:\d.*$/g, '')));
     const clash = negTags.filter((t) => posSet.has(t));
     if (clash.length) add('error', `Negative contradicts positive: ${clash.join(', ')}`);
+    const norm = tags.map((t) => t.toLowerCase().replace(/^\(+|\)+$/g, '').replace(/:\d(\.\d+)?$/, '').trim());
+    const dup = [...new Set(norm.filter((t, i) => norm.indexOf(t) !== i))];
+    if (dup.length) add('warn', `Repeated tags: ${dup.join(', ')}`, 'bloat');
+    const ONE = { framing: ['portrait', 'upper body', 'cowboy shot', 'full body', 'wide shot'], angle: ['from side', 'from behind', 'from above', 'from below', 'straight-on'],
+      gaze: ['looking at viewer', 'looking away', 'looking down', 'looking up', 'looking back', 'looking to the side', 'looking afar'],
+      palette: ['blue theme', 'red theme', 'orange theme', 'green theme', 'purple theme', 'yellow theme', 'monochrome', 'greyscale', 'sepia'] };
+    for (const [field, set] of Object.entries(ONE)) { const hit = set.filter((t) => norm.includes(t)); if (hit.length > 1) add('warn', `More than one ${field} tag: ${hit.join(', ')}`, 'bloat'); }
+    if (norm.includes('closed eyes') && norm.some((t) => t.startsWith('looking '))) add('error', 'Closed eyes take no gaze tag');
+    if (norm.includes('day') && norm.includes('night')) add('error', 'Day and night in the same prompt');
+    const QUAL = ['masterpiece', 'best quality', 'absurdres', 'high quality', 'highres', 'very aesthetic', 'amazing quality', 'great quality', 'newest', 'ultra detailed', 'extremely detailed', 'detailed'];
+    const q = norm.filter((t) => QUAL.includes(t));
+    if (q.length > 3) add('warn', `Quality pile: ${q.join(', ')}`, 'bloat');
+    const under = norm.filter((t) => t.includes('_') && !/^(score_|source_|rating_)/.test(t));
+    if (under.length) add('warn', `Underscores inside tags (use spaces): ${under.slice(0, 4).join(', ')}`);
+    const paren = tags.filter((t) => /\w \([^:)]+\)$/.test(t) && !t.includes('\\('));
+    if (paren.length) add('warn', `Unescaped parentheses in tag names: ${paren.slice(0, 3).join(', ')}`);
+    if ((target === 'anima' || target === 'anima_aesthetic') && norm.includes('general')) add('error', 'Anima\'s safety tag is "safe", not "general"');
+    if (target === 'pony' && !norm.some((t) => t.startsWith('rating_'))) add('warn', 'Pony expects a rating_safe / rating_questionable / rating_explicit tag');
+    if ((target === 'illustrious' || target === 'noobai') && !low.startsWith('masterpiece, best quality, absurdres')) add('info', 'Expected the base "masterpiece, best quality, absurdres" at the start (unless your model card says otherwise)');
   }
   return { items: L, count };
 }
+
+window.RUVET_LINT = lint; // exposed for tests
 
 // ---------- memory: what earlier sessions taught, frozen into each chat when it starts ----------
 function memoryBlock(target) {
@@ -451,7 +482,10 @@ function outHTML(run, target) {
   if (b.pos) {
     const pills = [];
     if (risk) pills.push(`<span class="pill ${+risk[1] <= 5 ? 'good' : +risk[1] <= 7 ? 'mid' : 'bad'}">risk ${risk[1]} · ${esc(risk[2])}</span>`);
-    if (out.lint) pills.push(`<span class="pill">${out.lint.count}</span>`);
+    if (out.lint) {
+      const bad = (cat) => out.lint.items.filter((i) => i.cat === cat && i.lv !== 'info').length, d = bad('dialect'), bl = bad('bloat');
+      pills.push(`<span class="pill">${out.lint.count}</span>`, `<span class="pill ${d ? 'bad' : 'good'}">${d ? `dialect · ${d} issue${d > 1 ? 's' : ''}` : 'dialect clean'}</span>`, `<span class="pill ${bl ? 'mid' : 'good'}">${bl ? `bloat · ${bl}` : 'lean'}</span>`);
+    }
     if (b.count > 1) pills.push(`<span class="pill">${b.count} variants</span>`);
     if (out.fb) pills.push(`<span class="pill ${out.fb === 'worked' ? 'good' : 'bad'}">${out.fb}</span>`);
     h.push(`<div class="sum">${pills.join('')}</div>`);
@@ -459,7 +493,7 @@ function outHTML(run, target) {
   if (b.fixed) h.push(`<div class="final"><h4>Final prompt — corrected by the critic</h4>${codeBlock(b.pos, 'pos')}${b.neg ? codeBlock(b.neg, 'neg') : ''}</div>`);
   h.push(b.fixed ? `<details class="sec"><summary>Original report</summary><div class="md">${md(out.text)}</div></details>` : `<div class="md">${md(out.text)}</div>`);
   if (out.critic?.text) h.push(`<details class="sec"${out.critic.pending ? ' open' : ''}><summary>Critic findings${out.critic.verdict ? ` — ${out.critic.verdict}` : ''}</summary><div class="md">${md(out.critic.text)}</div></details>`);
-  if (out.lint?.items.length) h.push(`<details class="sec" open><summary>Lint</summary><ul class="lint">${out.lint.items.map((i) => `<li class="${i.lv}">${esc(i.m)}</li>`).join('')}</ul></details>`);
+  if (out.lint?.items.length) h.push(`<details class="sec" open><summary>Lint</summary><ul class="lint">${out.lint.items.map((i) => `<li class="${i.lv}">${esc(i.m)}</li>`).join('')}</ul>${done && out.lint.items.some((i) => i.lv !== 'info') ? '<div class="actions"><button class="btn" data-act="fixlint">Fix these findings</button></div>' : ''}</details>`);
   if (out.review) {
     const v = out.review;
     h.push(`<div class="review"><img alt="Reviewed render" src="data:${v.image.media_type};base64,${v.image.data}"><div>` + (v.pending ? '<span class="dots"><i></i><i></i><i></i>Looking at the render…</span>'
@@ -789,6 +823,9 @@ thread.addEventListener('click', (e) => {
   else if (act === 'copyall') copyText(out.text);
   else if (act === 'save') saveToLibrary(b.pos, b.neg, run, target);
   else if (act === 'critic') runCritic(run, target);
+  else if (act === 'fixlint') {
+    send({ text: `Fix only these findings in the prompt below; change nothing else and do not add anything.\n${out.lint.items.filter((i) => i.lv !== 'info').map((i) => `- ${i.m}`).join('\n')}\n\npositive: ${b.pos}${b.neg ? `\nnegative: ${b.neg}` : ''}`, image: null, meta: { mode: 'audit', targets: [target] } });
+  }
   else if (act === 'review') { reviewFor = { run, target }; $('reviewFile').click(); }
   else if (act === 'rrepair') {
     const v = out.review;

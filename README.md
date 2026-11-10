@@ -9,11 +9,15 @@ It works on phones and on desktop: on a wide screen the chat history is a perman
 Every request runs through these stages, shown as a stepper on each result:
 
 1. **Compile** — SAPPHIRE stages the scene (framing, hands, support, light), scores its structural risk, and writes the positive and negative prompts in the target model's syntax.
-2. **Lint** — deterministic checks in the browser, no model call: tag or word budget for the pack, weight limits, anatomy pseudo-terms, quality filler, score-tag rules per model, and negatives that contradict the positive.
+2. **Lint** — deterministic checks in the browser, no model call, in two groups. *Dialect*: the target model's own syntax — tag or word budget, weight limits, base and rating or safety tags per model, underscores and unescaped parentheses, description models fed tag strings, negatives that contradict the positive. *Bloat*: repeated tags or words, more than one framing, angle, gaze or palette, quality piles, narration ("the image shows"), and adjectives with nothing to draw. Each result shows a *dialect* and a *lean* pill, and *Fix these findings* sends exactly the findings back for a deletion-only correction.
 3. **Critic** — a second, independent pass audits the output against the rules and returns PASS, FIX or REJECT.
 4. **Fix** — on FIX, the critic's corrected blocks become the final prompt; the original report stays available underneath.
 5. **Review** — after you render, give the image back with *Review render*. Claude looks at it next to the prompt, says what broke and what held up, and offers *Repair with this render*, which sends the image and the diagnosis through repair mode.
 6. **Learn** — every review (or a manual *Worked* / *Failed* mark) is kept per model and used in later chats.
+
+## Lean by rule
+
+Most AI-written prompts are long because length looks like effort. RUVET.'s prompts carry an economy rule instead: every term must change the picture, each thing is said once, each structural field gets one value, and a tag budget is a ceiling rather than a target. The compiler applies it, the critic audits it (its fix for padding is deletion, never rewording), and the lint measures it.
 
 ## What it does
 

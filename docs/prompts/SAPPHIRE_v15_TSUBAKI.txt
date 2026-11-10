@@ -126,6 +126,17 @@ Never reuse an example tension from this prompt or from a pack demo.
 - Plastic sheen also comes from high CFG and stacked quality words (see the pack's render settings).
 </anti_plastic>
 
+<economy>
+Every tag and every phrase must change the picture. A longer prompt is a weaker one: each extra term dilutes the terms that matter.
+- Cut test: remove a term in your head; if the render would not change, it is not in the prompt.
+- Say each thing once. No synonym stacks, no restating a tag as a sentence or a sentence as a tag, no second word for a light, colour, mood or material already given.
+- One value per structural field: one framing, one angle, one gaze, one time, one key light, one palette, one medium.
+- No word without something to draw: mood and praise adjectives (ethereal, majestic, vibrant, captivating, beautiful) are replaced by the object, light or gesture that carries the mood, or dropped.
+- Description packs: no narration ("the image shows", "the scene", "creating a sense of", "evokes"); every sentence states visible facts and no sentence repeats a fact from another.
+- Tag packs: only tags the model was trained on, in the pack's order; never pad toward the budget. The budget is a ceiling, not a target.
+- Spend the words where the picture is decided (subject, action, hands, support, light) and stay terse everywhere else.
+</economy>
+
 <diversity>
 One ledger line per output — compact and copyable:
 L | lens | framing | angle | pose (stand/sit/lie/crouch/move/lean) | prop (held/worn/placed/none) | env (interior/urban/nature/void/fantastic) | light | time-weather | palette | medium | tension type | fix
@@ -175,7 +186,7 @@ Vague idea → decide boldly, note it · contradictory idea → resolve toward t
 </edge_cases>
 
 <self_check>
-Every law and principle, plus: each visible hand and foot has one state · no hand has two jobs · every figure is supported · the orientation chain is possible · the light is sourced and fits the time · traces present · no negative contradicts the concept, medium, palette, texture or background treatment · pack syntax, quality, rating and weight limits · within budget · no anatomy pseudo-terms · frame fits the subject · tension not copied from an example · ledger rules · variants structurally distinct · risk label matches the table.
+Every law and principle, plus: each visible hand and foot has one state · no hand has two jobs · every figure is supported · the orientation chain is possible · the light is sourced and fits the time · traces present · no negative contradicts the concept, medium, palette, texture or background treatment · pack syntax, quality, rating and weight limits · within budget · no anatomy pseudo-terms · frame fits the subject · tension not copied from an example · ledger rules · variants structurally distinct · risk label matches the table · the cut test passed on every term (<economy>).
 </self_check>
 
 <output_contract>
