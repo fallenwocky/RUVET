@@ -12,12 +12,16 @@ Every request runs through these stages, shown as a stepper on each result:
 2. **Lint** — deterministic checks in the browser, no model call: tag or word budget for the pack, weight limits, anatomy pseudo-terms, quality filler, score-tag rules per model, and negatives that contradict the positive.
 3. **Critic** — a second, independent pass audits the output against the rules and returns PASS, FIX or REJECT.
 4. **Fix** — on FIX, the critic's corrected blocks become the final prompt; the original report stays available underneath.
-5. **Learn** — after you render, mark the result *Worked* or *Failed* (with what failed). RUVET keeps that per model and uses it in later chats; *Save and repair* sends the failure straight back through repair mode.
+5. **Review** — after you render, give the image back with *Review render*. Claude looks at it next to the prompt, says what broke and what held up, and offers *Repair with this render*, which sends the image and the diagnosis through repair mode.
+6. **Learn** — every review (or a manual *Worked* / *Failed* mark) is kept per model and used in later chats.
 
 ## What it does
 
 - **Several models from one idea.** Pick up to four targets (Tsubaki.3, Flux, Qwen-Image, GPT-image, Midjourney, Illustrious, NoobAI, Pony V6, Anima, Anima Aesthetic). Each gets its own compile and audit, shown as tabs, and each keeps its own conversation branch for follow-ups.
 - **Memory that carries across chats.** Per-model lessons (condensed from your render results on request, and editable), your house style (typed in, or inferred from the prompts you saved), and a diversity ledger so new chats do not repeat the lens, light, palette and staging of the last ones.
+- **Kit.** Save the characters you reuse (identity, outfit, notes) and your LoRAs (trigger words, weight, type, base model), then pick them per request. Lint flags a LoRA whose base does not run on the target model, a missing trigger and an over-weighted style LoRA.
+- **Reads prompts out of PNGs.** Attach a PNG from A1111, Forge or ComfyUI and the embedded prompt and settings are read on the device and placed in the composer, ready to audit or repair.
+- **Backup.** One file holds chats, library, kit and memory (never the API key) and restores them on any device.
 - **Creative direction.** Force a lens (before, after, detail, environment, metaphor…) or a tension type, set boldness from safe to bold, or use *Spark* to get five concept seeds from a theme.
 - **Modes:** auto · generate · variants · audit · repair · image · discuss, plus compact output.
 - **Library.** Keep prompts, search and filter them, remix one into variants, export or import as JSON.

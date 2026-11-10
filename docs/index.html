@@ -32,6 +32,7 @@ body { margin: 0; } [hidden] { display: none !important; } img { max-width: 100%
 
   <main id="thread" aria-live="polite"></main>
   <section id="library" class="page" hidden></section>
+  <section id="kit" class="page" hidden></section>
   <section id="memory" class="page" hidden></section>
 
   <footer id="composer">
@@ -48,6 +49,7 @@ body { margin: 0; } [hidden] { display: none !important; } img { max-width: 100%
         <label class="field">Tension<select id="tension"></select></label>
         <label class="field">Boldness<select id="bold"><option value="safe">safe</option><option value="balanced">balanced</option><option value="bold">bold</option></select></label>
       </div>
+      <div><div class="lbl">From your kit — characters and LoRAs for this request</div><div id="cast" class="chips wrap"></div></div>
       <div id="toggles" class="chips wrap"></div>
     </div>
     <div id="attach" hidden><img alt="Attached image"><button id="attachDel" class="icon" aria-label="Remove image"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
@@ -58,6 +60,8 @@ body { margin: 0; } [hidden] { display: none !important; } img { max-width: 100%
       <button id="sendBtn" class="send" aria-label="Send"><svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><svg class="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>
     </div>
     <input id="file" type="file" accept="image/*" hidden>
+    <input id="reviewFile" type="file" accept="image/*" hidden>
+    <input id="restoreFile" type="file" accept="application/json,.json" hidden>
   </footer>
 </div>
 

@@ -23,6 +23,12 @@
       const caps = await sample.limits().catch(() => null);
       return { images: !!caps?.images };
     },
+    // Artifacts cannot start a download themselves; the downloads capability asks the viewer to save the file.
+    async saveFile(name, text) {
+      const downloads = await window.claude?.use?.('downloads').catch(() => null);
+      if (!downloads) throw new Error('downloads unavailable');
+      await downloads.save({ filename: name, data: text });
+    },
     needs: () => (off ? 'Claude cannot be reached in this view. Open the page while signed in to claude.ai' : null),
     loadPrompt: async (name) => document.getElementById('p-' + name).textContent.trim(),
     async ask({ cfg, system, turns, onText, signal, quick }) {

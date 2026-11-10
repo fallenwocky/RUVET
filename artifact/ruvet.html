@@ -76,6 +76,13 @@ details.sec > summary { cursor: pointer; font-size: 12.5px; color: var(--dim); p
 .lint li { padding: 3px 0 3px 16px; position: relative; }
 .lint li::before { content: ""; position: absolute; left: 2px; top: 11px; width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
 .lint li.error::before { background: var(--neg); } .lint li.warn::before { background: var(--warn); }
+.review { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-top: 10px; background: var(--bg); }
+.review img { width: 96px; max-height: 150px; object-fit: cover; border-radius: 8px; flex: none; }
+.review > div { flex: 1; min-width: 0; font-size: 13.5px; }
+.review h4 { margin: 0 0 4px; font: 600 13px var(--body); display: flex; gap: 8px; align-items: center; }
+.review p { margin: 3px 0; }
+.review strong { color: var(--strong); font-weight: 600; }
+.lessons li .btn { flex: none; }
 .note { font-size: 12.5px; color: var(--warn); margin: 6px 0 0; }
 
 .md h1, .md h2, .md h3 { font: 700 17px var(--display); margin: 12px 0 6px; text-wrap: balance; }
@@ -225,6 +232,7 @@ dialog small { font-size: 11.5px; }
 
   <main id="thread" aria-live="polite"></main>
   <section id="library" class="page" hidden></section>
+  <section id="kit" class="page" hidden></section>
   <section id="memory" class="page" hidden></section>
 
   <footer id="composer">
@@ -241,6 +249,7 @@ dialog small { font-size: 11.5px; }
         <label class="field">Tension<select id="tension"></select></label>
         <label class="field">Boldness<select id="bold"><option value="safe">safe</option><option value="balanced">balanced</option><option value="bold">bold</option></select></label>
       </div>
+      <div><div class="lbl">From your kit — characters and LoRAs for this request</div><div id="cast" class="chips wrap"></div></div>
       <div id="toggles" class="chips wrap"></div>
     </div>
     <div id="attach" hidden><img alt="Attached image"><button id="attachDel" class="icon" aria-label="Remove image"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
@@ -251,6 +260,8 @@ dialog small { font-size: 11.5px; }
       <button id="sendBtn" class="send" aria-label="Send"><svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><svg class="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>
     </div>
     <input id="file" type="file" accept="image/*" hidden>
+    <input id="reviewFile" type="file" accept="image/*" hidden>
+    <input id="restoreFile" type="file" accept="application/json,.json" hidden>
   </footer>
 </div>
 
@@ -333,6 +344,7 @@ Plain text or JSON; all optional except one of concept, image, prompt_to_audit.
 - loras: [{name, trigger, weight, type: style|character|concept, base: sdxl|dit|other}] · references: [{slot, role: character|style|pose}]
 - house_style: {palette, motifs, banned, signature} — the user's standing aesthetic; apply it unless the concept overrides it. A <house_style> block appended to this prompt counts the same.
 - platform: {negative_field, weights: auto|off, break}
+- characters: [{name, series, identity, outfit, notes}] — the user's saved characters for this scene. Keep each one's identity and outfit exactly as given unless the concept changes the outfit; one complete attribute set each (S6); an empty series means an original character, described by appearance only.
 - lens · tension: force one C2 lens or C3 tension type for this output (R1 does not apply to a forced value; note it).
 - boldness: safe (risk 5 or below, well-known staging) | balanced | bold (develop the second or third idea, spend the risk budget up to 7).
 </input_contract>
@@ -580,6 +592,7 @@ Plain text or JSON; all optional except one of concept, image, prompt_to_audit.
 - loras: [{name, trigger, weight, type: style|character|concept, base: sdxl|dit|other}] · references: [{slot, role: character|style|pose}]
 - house_style: {palette, motifs, banned, signature} — the user's standing aesthetic; apply it unless the concept overrides it. A <house_style> block appended to this prompt counts the same.
 - platform: {negative_field, weights: auto|off, break}
+- characters: [{name, series, identity, outfit, notes}] — the user's saved characters for this scene. Keep each one's identity and outfit exactly as given unless the concept changes the outfit; one complete attribute set each (S6); an empty series means an original character, described by appearance only.
 - lens · tension: force one C2 lens or C3 tension type for this output (R1 does not apply to a forced value; note it).
 - boldness: safe (risk 5 or below, well-known staging) | balanced | bold (develop the second or third idea, spend the risk budget up to 7).
 </input_contract>
@@ -842,6 +855,7 @@ Plain text or JSON; all optional except one of concept, image, prompt_to_audit.
 - loras: [{name, trigger, weight, type: style|character|concept, base: sdxl|dit|other}] · references: [{slot, role: character|style|pose}]
 - house_style: {palette, motifs, banned, signature} — the user's standing aesthetic; apply it unless the concept overrides it. A <house_style> block appended to this prompt counts the same.
 - platform: {negative_field, weights: auto|off, break}
+- characters: [{name, series, identity, outfit, notes}] — the user's saved characters for this scene. Keep each one's identity and outfit exactly as given unless the concept changes the outfit; one complete attribute set each (S6); an empty series means an original character, described by appearance only.
 - lens · tension: force one C2 lens or C3 tension type for this output (R1 does not apply to a forced value; note it).
 - boldness: safe (risk 5 or below, well-known staging) | balanced | bold (develop the second or third idea, spend the risk budget up to 7).
 </input_contract>
@@ -1107,13 +1121,16 @@ const EXAMPLES = [
   { mode: 'variants', text: 'A witch who missed the last train' },
   { mode: 'discuss', text: 'An underwater library — where does the idea break?' },
 ];
-const VIEWS = ['studio', 'library', 'memory'];
+const VIEWS = ['studio', 'library', 'kit', 'memory'];
 const HOUSE = [['palette', 'Palette', 'e.g. cold blues, one warm accent'], ['motifs', 'Motifs', 'e.g. old electronics, rain'], ['banned', 'Banned', 'e.g. neon, cat ears'], ['signature', 'Signature', 'e.g. one red object in every scene']];
-const HELPERS = {
+const HELPERS_RAW = {
   spark: 'You invent picture ideas for an anime/illustration prompt compiler. Reply with only a JSON array of 5 strings. Each string is one sentence of at most 22 words describing one frozen moment: a specific subject, a specific place, and one plausible, unexpected contrast that is cheap to draw (no crowds, no complex hand actions). Make the five differ in subject, setting, mood and time of day. Avoid stock imagery: no cherry blossoms, glowing eyes, lone figure on a rooftop, angel wings. Write in the language of the theme if one is given, otherwise English.',
   lessons: 'You maintain calibration lessons for an image-prompt compiler. You get the existing lessons and a list of render results the user reported for one image model (what worked, what failed and how). Reply with only a JSON array of at most 8 strings. Each string is one concrete, actionable rule of at most 22 words about staging, framing, hands, characters, background, light or style on this model. Keep existing lessons the results do not contradict, merge duplicates, and add only rules that at least one result supports. Do not mention concepts or subjects from the results.',
+  review: 'You review a rendered image against the prompt that produced it, for an image-prompt compiler. Judge only how the render came out: structure, anatomy, staging, light, style and whether the prompt\'s defining elements are present. Reply with only a JSON object: {"verdict": "worked" | "failed", "issues": [], "kept": [], "note": ""}. issues: zero or more of exactly these strings — ISSUELIST — only for failures clearly visible in the image. kept: up to 3 short phrases naming what rendered well. note: one sentence of at most 25 words on the most useful thing to change next time, or "" if nothing. verdict is "failed" when any listed issue is clearly visible or a defining element of the prompt is missing, otherwise "worked". Do not identify people.',
   style: 'You infer a person\'s standing visual taste from image prompts they chose to keep. Reply with only a JSON object with the string keys palette, motifs, banned, signature — each at most 14 words, describing what recurs across the prompts (banned = things they consistently avoid, or "" if unclear; signature = one recurring device, or "" if none). Use "" for anything the prompts do not support.',
 };
+
+const HELPERS = { ...HELPERS_RAW, review: HELPERS_RAW.review.replace('ISSUELIST', ISSUES.join(', ')) };
 
 // ---------- persistence ----------
 const store = {
@@ -1122,10 +1139,12 @@ const store = {
 };
 const cfg = store.get('ruvet.settings', {});
 for (const f of backend.fields) cfg[f.id] ??= f.def ?? '';
-const prefs = Object.assign({ mode: 'auto', targets: ['tsubaki3'], rating: 'general', aspect: '', variants: '3', compact: false, lens: '', tension: '', bold: 'balanced', full: true, optsOpen: false }, store.get('ruvet.prefs', {}));
+const prefs = Object.assign({ mode: 'auto', targets: ['tsubaki3'], rating: 'general', aspect: '', variants: '3', compact: false, lens: '', tension: '', bold: 'balanced', full: true, optsOpen: false, chars: [], loras: [] }, store.get('ruvet.prefs', {}));
 prefs.targets = prefs.targets.filter((t) => TARGETS.some((x) => x.id === t)); if (!prefs.targets.length) prefs.targets = ['tsubaki3'];
 const memory = Object.assign({ house: {}, lessons: {}, feedback: [], ledger: [] }, store.get('ruvet.memory', {}));
 let library = store.get('ruvet.library', []);
+const kit = Object.assign({ chars: [], loras: [] }, store.get('ruvet.kit', {}));
+const saveKit = () => { prefs.chars = prefs.chars.filter((id) => kit.chars.some((c) => c.id === id)); prefs.loras = prefs.loras.filter((id) => kit.loras.some((l) => l.id === id)); store.set('ruvet.kit', kit); };
 const saveMemory = () => store.set('ruvet.memory', memory);
 const saveLibrary = () => store.set('ruvet.library', library);
 
@@ -1226,9 +1245,16 @@ function finalBlocks(out) {
 }
 
 // ---------- lint: deterministic checks against the target pack's syntax ----------
-function lint(target, pos, neg) {
+function lint(target, pos, neg, meta) {
   const pack = targetInfo(target).pack, L = [], low = pos.toLowerCase();
   const add = (lv, m) => L.push({ lv, m });
+  for (const l of meta?.loras ?? []) {
+    const dit = pack !== 'TAG';
+    if (l.base === 'sdxl' && dit) add('error', `LoRA "${l.name}" is an SDXL LoRA; it does not run on ${targetInfo(target).label}`);
+    else if (l.base === 'dit' && !dit) add('error', `LoRA "${l.name}" is a DiT LoRA; it does not run on ${targetInfo(target).label}`);
+    else if (l.trigger && !low.includes(l.trigger.toLowerCase())) add('warn', `LoRA trigger missing from the prompt: ${l.trigger}`);
+    if (l.type === 'style' && +l.weight > 1) add('warn', `Style LoRA "${l.name}" above 1.0 tends to break anatomy`);
+  }
   const has = (w) => new RegExp('(^|[^a-z0-9])' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)').test(low);
   const found = (list) => list.filter(has);
   const weights = [...pos.matchAll(/\(([^()]+):(\d(?:\.\d+)?)\)/g)];
@@ -1322,6 +1348,8 @@ function compose(text, meta, target, hasImage, notes) {
   if (meta.lens) head.push(`lens: ${meta.lens}`);
   if (meta.tension) head.push(`tension: ${meta.tension}`);
   if (meta.bold !== 'balanced') head.push(`boldness: ${meta.bold}`);
+  if (meta.cast?.length) head.push(`characters: ${JSON.stringify(meta.cast.map(({ name, series, identity, outfit, notes }) => ({ name, series, identity, outfit, notes })))}`);
+  if (meta.loras?.length) head.push(`loras: ${JSON.stringify(meta.loras.map(({ name, trigger, weight, type, base }) => ({ name, trigger, weight: +weight || 1, type, base })))}`);
   if (hasImage) head.push('image: attached to this message');
   for (const n of notes) head.push(`feedback: ${n}`);
   return `${head.join('\n')}\n\n${text}`.trim();
@@ -1363,7 +1391,7 @@ async function pipeline(run, target) {
     harvestLedger(out.text);
     const b = finalBlocks(out);
     if (b.pos) {
-      out.lint = lint(target, b.pos, b.neg);
+      out.lint = lint(target, b.pos, b.neg, run.meta);
       if (run.meta.full) await critic(run, target, out);
     }
   } catch (e) {
@@ -1386,28 +1414,30 @@ async function critic(run, target, out) {
   c.verdict = { 'GEÇTİ': 'PASS', 'DÜZELT': 'FIX', 'REDDET': 'REJECT' }[c.verdict] ?? c.verdict;
   if (c.verdict === 'FIX') {
     const fixed = extractBlocks(res.text);
-    if (fixed.pos[0]) { c.pos = fixed.pos[0]; c.neg = fixed.neg[0]; const b = finalBlocks(out); out.lint = lint(target, b.pos, b.neg); }
+    if (fixed.pos[0]) { c.pos = fixed.pos[0]; c.neg = fixed.neg[0]; const b = finalBlocks(out); out.lint = lint(target, b.pos, b.neg, run.meta); }
   }
 }
 
-async function send() {
-  if (running) { ctl?.abort(); return; }
-  const input = $('input'), text = input.value.trim();
-  if (!text && !pendingImage) return;
+// `over` runs a request the app composed itself (e.g. a repair from a render review) without touching the composer.
+async function send(over) {
+  if (running) { if (!over) ctl?.abort(); return; }
+  const input = $('input'), text = over?.text ?? input.value.trim(), image = over ? over.image : pendingImage;
+  if (!text && !image) return;
   const need = backend.needs(cfg);
   if (need) { openSettings(); toast(need); return; }
-  const meta = { ...prefs, targets: [...prefs.targets] }, image = pendingImage;
+  const meta = { ...prefs, targets: [...prefs.targets], ...over?.meta };
+  meta.cast = kit.chars.filter((c) => prefs.chars.includes(c.id)); meta.loras = kit.loras.filter((l) => prefs.loras.includes(l.id));
   const run = { id: uid(), text, meta, image, composed: {}, outs: {}, tab: meta.targets[0] };
   for (const t of meta.targets) run.composed[t] = compose(text, meta, t, !!image, notesFor(t));
   const fbBefore = chat.fb; chat.fb = {};
   chat.runs.push(run); chat.title ||= (text || 'Image').slice(0, 60);
-  input.value = ''; autosize(); setImage(null); $('sparks').hidden = true;
+  if (!over) { input.value = ''; autosize(); setImage(null); $('sparks').hidden = true; }
   running = true; ctl = new AbortController(); setBusy(true); renderThread();
   for (const t of meta.targets) { if (ctl.signal.aborted) break; await pipeline(run, t); }
   running = false; ctl = null; setBusy(false);
   if (!Object.keys(run.outs).length) {
     // Nothing usable came back: roll the run back and return the text to the composer.
-    chat.runs.pop(); chat.fb = fbBefore; input.value = text; autosize(); setImage(image);
+    chat.runs.pop(); chat.fb = fbBefore; if (!over) { input.value = text; autosize(); setImage(image); }
   }
   renderThread(); saveChat();
 }
@@ -1452,14 +1482,27 @@ async function learnStyle() {
   for (const [k] of HOUSE) if (typeof s[k] === 'string' && s[k].trim()) memory.house[k] = s[k].trim();
   saveMemory(); toast('House style updated from your library');
 }
-async function helper(system, text) {
+async function helper(system, text, opts = {}) {
   if (running) { toast('Stop the current run first'); return null; }
   const need = backend.needs(cfg);
   if (need) { openSettings(); toast(need); return null; }
   running = true; ctl = new AbortController(); setBusy(true);
-  try { return (await ask({ system, turns: [{ role: 'user', text }], quick: true })).text; }
+  try { return (await ask({ system, turns: [{ role: 'user', text, image: opts.image }], quick: opts.quick ?? true })).text; }
   catch (e) { const msg = backend.describeError(e); if (msg) toast(msg); return null; }
   finally { running = false; ctl = null; setBusy(false); }
+}
+// Render review: Claude looks at the rendered image next to the prompt, and the verdict goes into memory by itself.
+async function reviewRender(run, target, image) {
+  const out = run.outs[target], b = finalBlocks(out);
+  out.review = { pending: true, image }; paint(run);
+  const res = await helper(HELPERS.review, `Target model: ${target}\n\nPositive prompt:\n${b.pos}\n\nNegative prompt:\n${b.neg || '(none)'}\n\nThe attached image is the render.`, { image, quick: false });
+  let r = null;
+  try { r = res && parseJSON(res); } catch { /* handled below */ }
+  if (!r || typeof r !== 'object') { delete out.review; paint(run); if (res) toast('Could not read the review; try again'); return; }
+  out.review = { image, verdict: r.verdict === 'worked' ? 'worked' : 'failed', issues: (Array.isArray(r.issues) ? r.issues : []).filter((i) => ISSUES.includes(i)),
+    kept: (Array.isArray(r.kept) ? r.kept : []).map(String).slice(0, 3), note: String(r.note ?? '').slice(0, 240) };
+  recordFeedback(run, target, out.review.verdict, out.review.issues, out.review.note);
+  paint(run);
 }
 async function spark() {
   const theme = $('input').value.trim();
@@ -1506,11 +1549,19 @@ function outHTML(run, target) {
   h.push(b.fixed ? `<details class="sec"><summary>Original report</summary><div class="md">${md(out.text)}</div></details>` : `<div class="md">${md(out.text)}</div>`);
   if (out.critic?.text) h.push(`<details class="sec"${out.critic.pending ? ' open' : ''}><summary>Critic findings${out.critic.verdict ? ` — ${out.critic.verdict}` : ''}</summary><div class="md">${md(out.critic.text)}</div></details>`);
   if (out.lint?.items.length) h.push(`<details class="sec" open><summary>Lint</summary><ul class="lint">${out.lint.items.map((i) => `<li class="${i.lv}">${esc(i.m)}</li>`).join('')}</ul></details>`);
+  if (out.review) {
+    const v = out.review;
+    h.push(`<div class="review"><img alt="Reviewed render" src="data:${v.image.media_type};base64,${v.image.data}"><div>` + (v.pending ? '<span class="dots"><i></i><i></i><i></i>Looking at the render…</span>'
+      : `<h4>Render review <span class="pill ${v.verdict === 'worked' ? 'good' : 'bad'}">${v.verdict}</span></h4>`
+        + (v.issues.length ? `<p><strong>Broke:</strong> ${esc(v.issues.join(', '))}</p>` : '') + (v.kept.length ? `<p><strong>Held up:</strong> ${esc(v.kept.join(', '))}</p>` : '') + (v.note ? `<p>${esc(v.note)}</p>` : '')
+        + (v.verdict === 'failed' ? '<div class="actions"><button class="btn primary" data-act="rrepair">Repair with this render</button></div>' : '')) + '</div></div>');
+  }
   if (out.note) h.push(`<div class="note">${esc(out.note)}</div>`);
   if (done && b.pos) {
     h.push(`<div class="actions"><button class="btn primary" data-act="copyp">Copy prompt</button>${b.neg ? '<button class="btn" data-act="copyn">Copy negative</button>' : ''}`
       + `<button class="btn" data-act="save">Save</button>`
       + (out.done && !out.critic ? '<button class="btn" data-act="critic">Run critic</button>' : '')
+      + (caps.images ? '<button class="btn" data-act="review">Review render</button>' : '')
       + `<button class="btn ${out.fb === 'worked' ? 'on' : ''}" data-act="worked">Worked</button><button class="btn ${out.fb === 'failed' ? 'off' : ''}" data-act="failed">Failed</button></div>`);
     if (run.fbOpen === target) {
       const d = run.fbDraft ?? { issues: [] };
@@ -1524,7 +1575,7 @@ function outHTML(run, target) {
 }
 function runHTML(run, i) {
   const m = run.meta, tgs = m.targets;
-  const tags = [m.mode !== 'auto' && m.mode, tgs.length === 1 && targetInfo(tgs[0]).label, m.rating !== 'general' && m.rating, m.aspect, m.lens && `lens: ${m.lens}`, m.tension && `tension: ${m.tension}`, m.bold !== 'balanced' && m.bold, m.compact && 'compact', !m.full && 'no critic']
+  const tags = [m.mode !== 'auto' && m.mode, tgs.length === 1 && targetInfo(tgs[0]).label, m.rating !== 'general' && m.rating, m.aspect, m.lens && `lens: ${m.lens}`, m.tension && `tension: ${m.tension}`, m.bold !== 'balanced' && m.bold, m.compact && 'compact', !m.full && 'no critic', ...(m.cast ?? []).map((c) => c.name), ...(m.loras ?? []).map((l) => `LoRA: ${l.name}`)]
     .filter(Boolean).map((t) => `<span>${esc(t)}</span>`).join('');
   const tab = tgs.includes(run.tab) ? run.tab : tgs[0], out = run.outs[tab];
   return `<div class="run" data-i="${i}"><div class="user">${run.image ? `<img alt="Attached image" src="data:${run.image.media_type};base64,${run.image.data}">` : ''}${run.text ? `<div class="bubble">${esc(run.text)}</div>` : ''}<div class="tags">${tags}</div></div>`
@@ -1604,17 +1655,69 @@ function renderMemory() {
         <details class="sec"><summary>Recent results (${fb.length})</summary><ul class="lessons">${fb.slice(-12).reverse().map((f) => `<li><span>${esc(f.verdict)}${f.issues?.length ? ` — ${esc(f.issues.join(', '))}` : ''}${f.note ? ` — ${esc(f.note)}` : ''}<small>${esc(f.concept || '')}</small></span><button class="x" data-m="delfb" data-id="${f.id}" aria-label="Remove result">×</button></li>`).join('')}</ul></details></div>`;
     }).join('') || '<div class="panel"><h3>Model lessons</h3><p class="hint" style="margin:0">Nothing yet. After you render a prompt, mark the result Worked or Failed in the Studio — RUVET keeps what it learns per model.</p></div>'}
     <div class="panel"><h3>Diversity ledger</h3><p class="hint">The last compositions RUVET produced. New chats avoid repeating their lens, light, palette and staging.</p>
-      ${memory.ledger.length ? `<ul class="lessons">${memory.ledger.slice().reverse().map((l) => `<li><span class="mono">${esc(l)}</span></li>`).join('')}</ul><div class="rowx"><button class="btn" data-m="clearledger">${armed.has('ledger') ? 'Clear?' : 'Clear ledger'}</button></div>` : '<p class="hint" style="margin:0">Empty.</p>'}</div>`;
+      ${memory.ledger.length ? `<ul class="lessons">${memory.ledger.slice().reverse().map((l) => `<li><span class="mono">${esc(l)}</span></li>`).join('')}</ul><div class="rowx"><button class="btn" data-m="clearledger">${armed.has('ledger') ? 'Clear?' : 'Clear ledger'}</button></div>` : '<p class="hint" style="margin:0">Empty.</p>'}</div>
+    <div class="panel"><h3>Backup</h3><p class="hint">Chats, library, kit and memory live only on this device. A backup file lets you keep them safe or move them to another device. It does not include your API key.</p>
+      <div class="rowx"><button class="btn primary" data-m="backup">Save a backup file</button><button class="btn" data-m="restore">${armed.has('restore') ? 'Replace everything here? Tap again' : 'Restore from a file'}</button></div></div>`;
+}
+
+// ---------- rendering: kit ----------
+const CHAR_F = [['name', 'Name', 'e.g. Mira'], ['series', 'Series (if any)', 'leave empty for your own character'], ['identity', 'Identity details', 'hair, eyes, build, 2–4 fixed traits'], ['outfit', 'Usual outfit', 'actual garments, not categories'], ['notes', 'Notes', 'e.g. left-handed, never smiles']];
+const LORA_F = [['name', 'Name', 'e.g. inkwash style'], ['trigger', 'Trigger words', 'exactly as the LoRA expects'], ['weight', 'Weight', '0.8']];
+let kitEdit = { chars: null, loras: null };
+function renderKit() {
+  const form = (kind, fields, extra) => { const cur = kit[kind].find((x) => x.id === kitEdit[kind]) ?? {};
+    return `<div class="fields" data-form="${kind}">${fields.map(([k, l, p]) => `<label class="field">${l}<input data-k="${k}" placeholder="${p}" value="${esc(cur[k] ?? '')}"></label>`).join('')}${extra(cur)}</div>
+      <div class="rowx"><button class="btn primary" data-kit="save" data-kind="${kind}">${kitEdit[kind] ? 'Save changes' : 'Add'}</button>${kitEdit[kind] ? `<button class="btn" data-kit="cancel" data-kind="${kind}">Cancel</button>` : ''}</div>`; };
+  const list = (kind, line) => kit[kind].length ? `<ul class="lessons">${kit[kind].map((x) => `<li><span><strong>${esc(x.name)}</strong><small>${esc(line(x))}</small></span>
+      <button class="btn" data-kit="edit" data-kind="${kind}" data-id="${x.id}">Edit</button><button class="x ${armed.has(kind + x.id) ? 'sure' : ''}" data-kit="del" data-kind="${kind}" data-id="${x.id}" aria-label="Delete">${armed.has(kind + x.id) ? 'Delete?' : '×'}</button></li>`).join('')}</ul>` : '';
+  const sel = (k, cur, opts) => `<label class="field">${k[0].toUpperCase() + k.slice(1)}<select data-k="${k}">${opts.map((o) => `<option${cur[k] === o ? ' selected' : ''}>${o}</option>`).join('')}</select></label>`;
+  $('kit').innerHTML = `<h2>Kit</h2><p class="lead">Characters and LoRAs you reuse. Pick them per request under the options in the Studio; RUVET keeps their details exact.</p>
+    <div class="panel"><h3>Characters</h3><p class="hint">Recurring characters keep the same identity in every prompt.</p>${list('chars', (c) => [c.series, c.identity, c.outfit].filter(Boolean).join(' · '))}${form('chars', CHAR_F, () => '')}</div>
+    <div class="panel"><h3>LoRAs</h3><p class="hint">The app attaches trigger words and checks the base model against your target.</p>${list('loras', (l) => [l.trigger, `weight ${l.weight || 1}`, l.type, l.base].filter(Boolean).join(' · '))}${form('loras', LORA_F, (c) => sel('type', c, ['style', 'character', 'concept']) + sel('base', c, ['sdxl', 'dit', 'other']))}</div>`;
+}
+$('kit').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-kit]'); if (!b) return;
+  const kind = b.dataset.kind, a = b.dataset.kit, id = b.dataset.id;
+  if (a === 'save') {
+    const v = {}; for (const el of $('kit').querySelectorAll(`[data-form="${kind}"] [data-k]`)) v[el.dataset.k] = el.value.trim();
+    if (!v.name) return toast('Give it a name');
+    const cur = kit[kind].find((x) => x.id === kitEdit[kind]);
+    if (cur) Object.assign(cur, v); else kit[kind].push({ id: uid(), ...v });
+    kitEdit[kind] = null;
+  } else if (a === 'edit') kitEdit[kind] = id;
+  else if (a === 'cancel') kitEdit[kind] = null;
+  else if (a === 'del') { if (confirmTap(kind + id)) kit[kind] = kit[kind].filter((x) => x.id !== id); }
+  saveKit(); syncControls(); renderKit(); renderNav();
+});
+
+// ---------- backup ----------
+async function makeBackup() {
+  const chats = await idb('readonly', (s) => s.getAll()).catch(() => []);
+  const data = { app: 'RUVET.', version: 1, exported: new Date().toISOString(), prefs, memory, library, kit, chats };
+  const name = `ruvet-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  try { await backend.saveFile(name, JSON.stringify(data)); toast('Backup saved'); }
+  catch { toast('The backup was not saved'); }
+}
+async function restoreBackup(file) {
+  let d; try { d = JSON.parse(await file.text()); } catch { return toast('That file is not a RUVET backup'); }
+  if (d?.app !== 'RUVET.' || !Array.isArray(d.chats)) return toast('That file is not a RUVET backup');
+  Object.assign(memory, { house: {}, lessons: {}, feedback: [], ledger: [] }, d.memory); saveMemory();
+  library = Array.isArray(d.library) ? d.library : []; saveLibrary();
+  Object.assign(kit, { chars: [], loras: [] }, d.kit); Object.assign(prefs, d.prefs); saveKit();
+  await idb('readwrite', (s) => { s.clear(); for (const c of d.chats) s.put(c); }).catch(() => toast('Chats could not be restored'));
+  chat = newChat(); syncControls(); renderThread(); renderChats(); setView('memory');
+  toast(`Restored ${d.chats.length} chats, ${library.length} prompts`);
 }
 
 // ---------- shell ----------
 function renderNav() {
-  const view = document.body.dataset.view, n = { library: library.length, memory: TARGETS.reduce((a, t) => a + unlearned(t.id), 0) };
+  const view = document.body.dataset.view, n = { library: library.length, kit: kit.chars.length + kit.loras.length, memory: TARGETS.reduce((a, t) => a + unlearned(t.id), 0) };
   $('views').innerHTML = VIEWS.map((v) => `<button data-view="${v}" aria-pressed="${v === view}">${v[0].toUpperCase() + v.slice(1)}${n[v] ? `<span class="n">${n[v]}</span>` : ''}</button>`).join('');
 }
 function setView(v) {
   document.body.dataset.view = v; armed.clear();
-  $('library').hidden = v !== 'library'; $('memory').hidden = v !== 'memory';
+  $('library').hidden = v !== 'library'; $('memory').hidden = v !== 'memory'; $('kit').hidden = v !== 'kit';
+  if (v === 'kit') renderKit();
   if (v === 'library') renderLibrary();
   if (v === 'memory') renderMemory();
   renderNav();
@@ -1623,11 +1726,14 @@ function syncControls() {
   $('modes').innerHTML = MODES.map((m) => `<button class="chip" data-mode="${m.id}" aria-pressed="${m.id === prefs.mode}">${m.id}</button>`).join('');
   $('targets').innerHTML = TARGETS.map((t) => `<button class="chip" data-target="${t.id}" aria-pressed="${prefs.targets.includes(t.id)}">${esc(t.label)}</button>`).join('');
   $('toggles').innerHTML = `<button class="chip alt" data-toggle="full" aria-pressed="${prefs.full}">critic + auto-fix</button><button class="chip alt" data-toggle="compact" aria-pressed="${prefs.compact}">compact output</button>`;
+  $('cast').innerHTML = kit.chars.map((c) => `<button class="chip" data-char="${c.id}" aria-pressed="${prefs.chars.includes(c.id)}">${esc(c.name)}</button>`).join('')
+    + kit.loras.map((l) => `<button class="chip alt" data-lora="${l.id}" aria-pressed="${prefs.loras.includes(l.id)}">LoRA: ${esc(l.name)}</button>`).join('')
+    || '<span class="lbl">None saved yet — add characters and LoRAs in the Kit tab.</span>';
   $('input').placeholder = MODES.find((m) => m.id === prefs.mode)?.hint ?? '';
   $('variantsWrap').hidden = prefs.mode !== 'variants';
   for (const k of ['rating', 'aspect', 'variants', 'lens', 'tension', 'bold']) $(k).value = prefs[k];
   const names = prefs.targets.map((t) => targetInfo(t).label);
-  $('optsText').textContent = [names.length > 2 ? `${names.length} models` : names.join(' + '), prefs.rating, prefs.aspect, prefs.lens && `lens: ${prefs.lens}`, prefs.tension && `tension: ${prefs.tension}`, prefs.bold !== 'balanced' && prefs.bold, prefs.full ? 'critic on' : 'critic off'].filter(Boolean).join(' · ');
+  $('optsText').textContent = [names.length > 2 ? `${names.length} models` : names.join(' + '), prefs.rating, prefs.aspect, prefs.lens && `lens: ${prefs.lens}`, prefs.tension && `tension: ${prefs.tension}`, prefs.bold !== 'balanced' && prefs.bold, (prefs.chars.length + prefs.loras.length) && `${prefs.chars.length + prefs.loras.length} from kit`, prefs.full ? 'critic on' : 'critic off'].filter(Boolean).join(' · ');
   $('opts').hidden = !prefs.optsOpen; $('optsBtn').setAttribute('aria-expanded', prefs.optsOpen);
   store.set('ruvet.prefs', prefs);
 }
@@ -1669,6 +1775,11 @@ $('targets').addEventListener('click', (e) => {
   if (!on && prefs.targets.length === 4) return toast('Four models at a time is the limit');
   prefs.targets = on ? prefs.targets.filter((x) => x !== t) : [...prefs.targets, t]; syncControls();
 });
+$('cast').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-char], [data-lora]'); if (!b) return;
+  const key = b.dataset.char ? 'chars' : 'loras', id = b.dataset.char ?? b.dataset.lora;
+  prefs[key] = prefs[key].includes(id) ? prefs[key].filter((x) => x !== id) : [...prefs[key], id]; syncControls();
+});
 $('toggles').addEventListener('click', (e) => { const b = e.target.closest('[data-toggle]'); if (!b) return; prefs[b.dataset.toggle] = !prefs[b.dataset.toggle]; syncControls(); });
 $('optsBtn').addEventListener('click', () => { prefs.optsOpen = !prefs.optsOpen; syncControls(); });
 for (const k of ['rating', 'aspect', 'variants', 'lens', 'tension', 'bold']) $(k).addEventListener('change', (e) => { prefs[k] = e.target.value; syncControls(); });
@@ -1681,20 +1792,58 @@ $('input').addEventListener('keydown', (e) => {
 $('input').addEventListener('paste', async (e) => {
   const f = [...(e.clipboardData?.files ?? [])].find((x) => x.type.startsWith('image/'));
   if (!f || !caps.images) return;
-  e.preventDefault();
-  try { setImage(await readImage(f)); } catch { toast('Could not read the image'); }
+  e.preventDefault(); attachFile(f);
 });
-$('sendBtn').addEventListener('click', send);
+$('sendBtn').addEventListener('click', () => send());
 $('sparkBtn').addEventListener('click', spark);
 $('sparks').addEventListener('click', (e) => {
   if (e.target.closest('[data-close]')) { $('sparks').hidden = true; return; }
   const b = e.target.closest('[data-idea]'); if (!b) return;
   $('input').value = b.textContent; autosize(); $('sparks').hidden = true; $('input').focus();
 });
+// A1111 / Forge write the prompt into a PNG text chunk ("parameters"); ComfyUI writes its graph ("prompt").
+async function readPngPrompt(file) {
+  if (file.type !== 'image/png') return null;
+  const buf = new Uint8Array(await file.arrayBuffer()), dv = new DataView(buf.buffer), dec = new TextDecoder(), text = {};
+  for (let p = 8; p + 12 <= buf.length;) {
+    const len = dv.getUint32(p), type = dec.decode(buf.subarray(p + 4, p + 8)), data = buf.subarray(p + 8, p + 8 + len);
+    if (type === 'tEXt' || type === 'iTXt') {
+      const z = data.indexOf(0), key = dec.decode(data.subarray(0, z));
+      if (type === 'tEXt') text[key] = new TextDecoder('latin1').decode(data.subarray(z + 1));
+      else if (data[z + 1] === 0) { let q = z + 3; q = data.indexOf(0, q) + 1; q = data.indexOf(0, q) + 1; text[key] = dec.decode(data.subarray(q)); }
+    }
+    if (type === 'IEND') break;
+    p += 12 + len;
+  }
+  if (text.parameters) {
+    const m = text.parameters.match(/^([\s\S]*?)(?:\nNegative prompt: ([\s\S]*?))?(?:\n(Steps: [^\n]*))?$/);
+    return m ? `positive: ${m[1].trim()}${m[2] ? `\nnegative: ${m[2].trim()}` : ''}${m[3] ? `\nsettings: ${m[3].trim()}` : ''}` : text.parameters.trim();
+  }
+  if (text.prompt) {
+    try {
+      const texts = Object.values(JSON.parse(text.prompt)).filter((n) => /CLIPTextEncode/.test(n.class_type ?? '') && typeof n.inputs?.text === 'string' && n.inputs.text.trim()).map((n) => n.inputs.text.trim());
+      if (texts.length) return texts.map((t, i) => `prompt ${i + 1}: ${t}`).join('\n');
+    } catch { /* not a ComfyUI graph */ }
+  }
+  return null;
+}
+async function attachFile(f) {
+  try { setImage(await readImage(f)); } catch { return toast('Could not read the image'); }
+  const embedded = await readPngPrompt(f).catch(() => null);
+  if (embedded && !$('input').value.trim()) {
+    $('input').value = embedded; autosize();
+    if (prefs.mode === 'auto' || prefs.mode === 'generate') { prefs.mode = 'audit'; syncControls(); }
+    toast('Read the prompt embedded in this PNG');
+  }
+}
+let reviewFor = null;
 $('imgBtn').addEventListener('click', () => $('file').click());
-$('file').addEventListener('change', async (e) => {
-  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  try { setImage(await readImage(f)); } catch { toast('Could not read the image'); }
+$('file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) attachFile(f); });
+$('reviewFile').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f || !reviewFor) return;
+  const { run, target } = reviewFor; reviewFor = null;
+  let img; try { img = await readImage(f); } catch { return toast('Could not read the image'); }
+  await reviewRender(run, target, img); saveChat();
 });
 $('attachDel').addEventListener('click', () => setImage(null));
 
@@ -1729,6 +1878,11 @@ thread.addEventListener('click', (e) => {
   else if (act === 'copyall') copyText(out.text);
   else if (act === 'save') saveToLibrary(b.pos, b.neg, run, target);
   else if (act === 'critic') runCritic(run, target);
+  else if (act === 'review') { reviewFor = { run, target }; $('reviewFile').click(); }
+  else if (act === 'rrepair') {
+    const v = out.review;
+    send({ text: `The render failed${v.issues.length ? `: ${v.issues.join(', ')}` : ''}.${v.note ? ` ${v.note}` : ''} The attached image is the failed render.`, image: v.image, meta: { mode: 'repair', targets: [target] } });
+  }
   else if (act === 'worked') { run.fbOpen = null; recordFeedback(run, target, 'worked', [], ''); paint(run); }
   else if (act === 'failed') { run.fbOpen = run.fbOpen === target ? null : target; paint(run); }
   else if (act === 'fbcancel') { run.fbOpen = null; paint(run); }
@@ -1776,11 +1930,14 @@ $('memory').addEventListener('click', async (e) => {
     else if (a === 'dellesson') { memory.lessons[target].splice(+btn.dataset.i, 1); saveMemory(); }
     else if (a === 'addlesson') { const v = e.target.closest('.panel').querySelector('[data-newlesson]').value.trim(); if (!v) return; (memory.lessons[target] ??= []).push(v); saveMemory(); }
     else if (a === 'delfb') { memory.feedback = memory.feedback.filter((f) => f.id !== btn.dataset.id); saveMemory(); }
+    else if (a === 'backup') await makeBackup();
+    else if (a === 'restore') { if (confirmTap('restore')) $('restoreFile').click(); }
     else if (a === 'clearledger') { if (confirmTap('ledger')) { memory.ledger = []; saveMemory(); } }
   } catch { toast('Could not read the answer; try again'); }
   renderMemory(); renderNav();
 });
 
+$('restoreFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) restoreBackup(f); });
 $('menuBtn').addEventListener('click', openDrawer);
 $('scrim').addEventListener('click', closeDrawer);
 $('newBtn').addEventListener('click', () => { if (running) return toast('Stop the current run first'); chat = newChat(); setView('studio'); renderThread(); renderChats(); if (desktop.matches) $('input').focus(); });
@@ -1809,7 +1966,7 @@ $('setForm').addEventListener('submit', (e) => {
 $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) $('settings').close(); });
 $('wipeBtn').addEventListener('click', async () => {
   if (!confirmTap('wipe')) { $('wipeBtn').textContent = 'Sure? Chats, library, memory, settings'; return; }
-  for (const k of ['settings', 'prefs', 'memory', 'library']) { try { localStorage.removeItem('ruvet.' + k); } catch { /* unavailable */ } }
+  for (const k of ['settings', 'prefs', 'memory', 'library', 'kit']) { try { localStorage.removeItem('ruvet.' + k); } catch { /* unavailable */ } }
   await idb('readwrite', (s) => s.clear()).catch(() => {});
   location.reload();
 });
@@ -1843,6 +2000,12 @@ Promise.resolve(backend.init()).then((c) => { caps = c ?? caps; $('imgBtn').hidd
       if (!sample) { off = true; return { images: false, off: true }; }
       const caps = await sample.limits().catch(() => null);
       return { images: !!caps?.images };
+    },
+    // Artifacts cannot start a download themselves; the downloads capability asks the viewer to save the file.
+    async saveFile(name, text) {
+      const downloads = await window.claude?.use?.('downloads').catch(() => null);
+      if (!downloads) throw new Error('downloads unavailable');
+      await downloads.save({ filename: name, data: text });
     },
     needs: () => (off ? 'Claude cannot be reached in this view. Open the page while signed in to claude.ai' : null),
     loadPrompt: async (name) => document.getElementById('p-' + name).textContent.trim(),
