@@ -72,6 +72,13 @@ details.sec > summary { cursor: pointer; font-size: 12.5px; color: var(--dim); p
 .lint li { padding: 3px 0 3px 16px; position: relative; }
 .lint li::before { content: ""; position: absolute; left: 2px; top: 11px; width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
 .lint li.error::before { background: var(--neg); } .lint li.warn::before { background: var(--warn); }
+.review { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-top: 10px; background: var(--bg); }
+.review img { width: 96px; max-height: 150px; object-fit: cover; border-radius: 8px; flex: none; }
+.review > div { flex: 1; min-width: 0; font-size: 13.5px; }
+.review h4 { margin: 0 0 4px; font: 600 13px var(--body); display: flex; gap: 8px; align-items: center; }
+.review p { margin: 3px 0; }
+.review strong { color: var(--strong); font-weight: 600; }
+.lessons li .btn { flex: none; }
 .note { font-size: 12.5px; color: var(--warn); margin: 6px 0 0; }
 
 .md h1, .md h2, .md h3 { font: 700 17px var(--display); margin: 12px 0 6px; text-wrap: balance; }

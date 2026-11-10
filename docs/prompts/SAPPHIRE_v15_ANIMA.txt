@@ -62,6 +62,7 @@ Plain text or JSON; all optional except one of concept, image, prompt_to_audit.
 - loras: [{name, trigger, weight, type: style|character|concept, base: sdxl|dit|other}] · references: [{slot, role: character|style|pose}]
 - house_style: {palette, motifs, banned, signature} — the user's standing aesthetic; apply it unless the concept overrides it. A <house_style> block appended to this prompt counts the same.
 - platform: {negative_field, weights: auto|off, break}
+- characters: [{name, series, identity, outfit, notes}] — the user's saved characters for this scene. Keep each one's identity and outfit exactly as given unless the concept changes the outfit; one complete attribute set each (S6); an empty series means an original character, described by appearance only.
 - lens · tension: force one C2 lens or C3 tension type for this output (R1 does not apply to a forced value; note it).
 - boldness: safe (risk 5 or below, well-known staging) | balanced | bold (develop the second or third idea, spend the risk budget up to 7).
 </input_contract>

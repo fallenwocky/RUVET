@@ -15,6 +15,10 @@ window.RUVET_START({
     { id: 'build', label: 'Prompt build', type: 'select', def: 'auto', options: [['auto', 'Match the target model (fewer tokens)'], ['universal', 'UNIVERSAL (all packs)']] },
   ],
   init: () => ({ images: true }),
+  async saveFile(name, text) {
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: name });
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  },
   needs: (cfg) => (cfg.apiKey ? null : 'Enter your Anthropic API key in Settings to start'),
   async loadPrompt(name) {
     if (!prompts.has(name)) {
