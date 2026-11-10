@@ -1,17 +1,33 @@
 # RUVET.
 
-RUVET. is a prompt compiler for anime and illustration image models. Give it an idea, an image, a rough prompt or a failed render, pick the target model, and it returns a prompt written in that model's own dialect, with a risk report and a matching negative prompt. It runs the SAPPHIRE Vision Architect v15 prompt system on Claude.
+RUVET. is a prompt pipeline for anime and illustration image models. Give it an idea, an image, a rough prompt or a failed render, pick the image models you use, and it returns a prompt written in each model's own dialect — then lints it, has a second pass audit it, applies the fix, and remembers how your renders turned out. It runs the SAPPHIRE Vision Architect v15 prompt system on Claude.
 
-The app works on phones and on desktop: on a wide screen the chat history becomes a permanent sidebar and Enter sends the message (Shift+Enter makes a new line).
+It works on phones and on desktop: on a wide screen the chat history is a permanent sidebar and Enter sends (Shift+Enter makes a new line).
 
-## Features
+## The pipeline
 
-- **Modes:** auto · generate · variants · audit · repair · image · discuss, plus a compact-output toggle
-- **Target models:** Tsubaki.3, Flux, Qwen-Image, GPT-image, Midjourney, Illustrious, NoobAI, Pony V6, Anima, Anima Aesthetic — the matching prompt build (TSUBAKI / TAG / ANIMA) is loaded automatically
-- **Critic pass:** any output can be sent through the SAPPHIRE CRITIC prompt with one click
-- Image input (pick a file, or paste one on desktop), house style, chat history stored on the device, copy buttons for the Positive / Negative blocks
+Every request runs through these stages, shown as a stepper on each result:
 
-## Two versions
+1. **Compile** — SAPPHIRE stages the scene (framing, hands, support, light), scores its structural risk, and writes the positive and negative prompts in the target model's syntax.
+2. **Lint** — deterministic checks in the browser, no model call: tag or word budget for the pack, weight limits, anatomy pseudo-terms, quality filler, score-tag rules per model, and negatives that contradict the positive.
+3. **Critic** — a second, independent pass audits the output against the rules and returns PASS, FIX or REJECT.
+4. **Fix** — on FIX, the critic's corrected blocks become the final prompt; the original report stays available underneath.
+5. **Learn** — after you render, mark the result *Worked* or *Failed* (with what failed). RUVET keeps that per model and uses it in later chats; *Save and repair* sends the failure straight back through repair mode.
+
+## What it does
+
+- **Several models from one idea.** Pick up to four targets (Tsubaki.3, Flux, Qwen-Image, GPT-image, Midjourney, Illustrious, NoobAI, Pony V6, Anima, Anima Aesthetic). Each gets its own compile and audit, shown as tabs, and each keeps its own conversation branch for follow-ups.
+- **Memory that carries across chats.** Per-model lessons (condensed from your render results on request, and editable), your house style (typed in, or inferred from the prompts you saved), and a diversity ledger so new chats do not repeat the lens, light, palette and staging of the last ones.
+- **Creative direction.** Force a lens (before, after, detail, environment, metaphor…) or a tension type, set boldness from safe to bold, or use *Spark* to get five concept seeds from a theme.
+- **Modes:** auto · generate · variants · audit · repair · image · discuss, plus compact output.
+- **Library.** Keep prompts, search and filter them, remix one into variants, export or import as JSON.
+- Image input (pick a file, or paste one on desktop). Everything is stored on the device.
+
+### How this differs from similar tools
+
+Prompt upsamplers such as [TIPO / DanTagGen](https://github.com/KohakuBlueleaf/z-tipo-extension) and [sd-danbooru-tags-upsampler](https://www.github.com/p1atdev/sd-danbooru-tags-upsampler) expand a prompt with a small local model, and tag builders such as [danbooru-diffusion-prompt-builder](https://repos.ecosyste.ms/hosts/GitHub/repositories/wfjsw%2Fdanbooru-diffusion-prompt-builder) help you pick tags by hand. RUVET. is a different kind of tool: it plans the picture before writing it (one moment, one light source, a state for every visible hand), scores how likely the render is to break, audits and corrects its own output, writes the same idea for tag, hybrid and description models, and adjusts to your reported render results. It needs Claude to do so, and it does not generate images.
+
+## Two versions, one codebase
 
 ### Web app (`docs/`)
 
@@ -23,13 +39,17 @@ A static, installable web app (PWA) with no build step. It calls the Claude API 
 
 ### Keyless version (`artifact/`)
 
-`artifact/ruvet.html` is a single-file version published as an artifact on claude.ai. It needs no API key; replies draw on the Claude usage of whoever opens the page. Differences from the web app: there is no UNIVERSAL build option, and instead of a Claude model you choose a quality tier (balanced / most capable / fast).
+`artifact/ruvet.html` is the same app as a single file, published as an artifact on claude.ai. It needs no API key; replies draw on the Claude usage of whoever opens the page. Instead of a Claude model you choose a quality tier, and there is no UNIVERSAL build option.
 
-The file is generated from `artifact/template.html` and the prompts under `docs/prompts/`: `python3 artifact/build.py`. After changing the prompts or the template, regenerate it and republish the artifact.
+It is assembled from the web app's own files: `python3 artifact/build.py` takes the markup, `styles.css`, `app.js` and the prompts from `docs/`, and swaps `docs/backend-api.js` for `artifact/backend.js`. After any change, rebuild and republish the artifact.
 
 ## Development
 
-`docs/` is plain HTML/CSS/JS. `docs/vendor/anthropic.js` is the browser bundle of the official `@anthropic-ai/sdk` package; to update it run `npm install && npm run build:vendor`. The prompts live under `docs/prompts/`; if you change them, bump the `CACHE` version in `docs/sw.js`.
+- `docs/app.js` — the app; backend-agnostic. `docs/backend-api.js` (Claude API) and `artifact/backend.js` (Claude artifact) are the two backends.
+- `docs/prompts/` — the SAPPHIRE builds and the CRITIC prompt. If you change them, bump the `CACHE` version in `docs/sw.js`.
+- `docs/vendor/anthropic.js` — browser bundle of the official `@anthropic-ai/sdk`; update with `npm install && npm run build:vendor`.
+
+A full pipeline run costs two Claude calls per target model (compile and critic). Turn off *critic + auto-fix* in the options to make it one.
 
 ## License
 
