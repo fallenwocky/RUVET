@@ -1,0 +1,13 @@
+{
+  "name": "ruvet",
+  "private": true,
+  "description": "RUVET. — SAPPHIRE Vision Architect web app (the docs/ folder is served as a static site)",
+  "scripts": {
+    "build:vendor": "esbuild vendor-entry.js --bundle --format=esm --platform=browser --minify --outfile=docs/vendor/anthropic.js",
+    "serve": "npx --yes serve docs -l 8080"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^1.7.0",
+    "esbuild": "^0.28.2"
+  }
+}

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>RUVET.</title>
+<meta name="description" content="RUVET. — prompt compiler for anime/illustration image models">
+<meta name="theme-color" content="#0a1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RUVET.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="bar">
+  <button id="menuBtn" class="icon" aria-label="History">
+    <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+  <h1><svg class="gem" viewBox="0 0 24 24"><path d="M7 3h10l5 6-10 12L2 9z"/><path d="M2 9h20M7 3l5 6 5-6M12 9v12"/></svg>RUVET. <span>SAPPHIRE v15</span></h1>
+  <button id="newBtn" class="icon" aria-label="New chat">
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <button id="setBtn" class="icon" aria-label="Settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.8 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.8 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.2a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</header>
+
+<main id="thread" aria-live="polite"></main>
+
+<footer id="composer">
+  <div id="modes" class="chips" aria-label="Mode"></div>
+  <div class="opts">
+    <label>Model<select id="target"></select></label>
+    <label>Rating<select id="rating">
+      <option>general</option><option>sensitive</option><option>nsfw</option><option>explicit</option>
+    </select></label>
+    <label>Aspect<select id="aspect">
+      <option value="">auto</option><option value="portrait">portrait</option><option value="landscape">landscape</option><option value="square">square</option>
+    </select></label>
+    <label id="variantsWrap" hidden>Count<select id="variants">
+      <option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option>
+    </select></label>
+  </div>
+  <div id="attach" hidden><img alt="Attached image"><button id="attachDel" class="icon" aria-label="Remove image"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="inputrow">
+    <button id="imgBtn" class="icon" aria-label="Attach image">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>
+    </button>
+    <textarea id="input" rows="1" placeholder="Type an idea, a prompt or a problem…"></textarea>
+    <button id="sendBtn" class="send" aria-label="Send">
+      <svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+      <svg class="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+    </button>
+  </div>
+  <input id="file" type="file" accept="image/*" hidden>
+</footer>
+
+<div id="scrim" hidden></div>
+<aside id="drawer" aria-label="Chat history">
+  <h2>History</h2>
+  <ul id="chats"></ul>
+</aside>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h2>Settings</h2>
+    <label>Anthropic API key
+      <input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…">
+      <small>Stored only on this device and sent directly to api.anthropic.com. Get a key at console.anthropic.com</small>
+    </label>
+    <label>Claude model
+      <select id="claudeModel">
+        <option value="claude-opus-5-5">Claude Opus 5.5 (recommended)</option>
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (fast, cheaper)</option>
+        <option value="claude-haiku-5-5">Claude Haiku 5.5 (cheapest)</option>
+        <option value="claude-fable-5-2">Claude Fable 5.2 (most capable)</option>
+      </select>
+    </label>
+    <label>Thinking effort
+      <select id="effort">
+        <option value="low">low</option><option value="medium">medium</option><option value="high">high</option>
+      </select>
+    </label>
+    <label>Prompt build
+      <select id="buildMode">
+        <option value="auto">Match the target model (fewer tokens)</option>
+        <option value="universal">UNIVERSAL (all packs)</option>
+      </select>
+    </label>
+    <fieldset>
+      <legend>House style (optional)</legend>
+      <label>Palette<input id="hsPalette" placeholder="e.g. cold blues, one warm accent"></label>
+      <label>Motifs<input id="hsMotifs" placeholder="e.g. old electronics, rain"></label>
+      <label>Banned<input id="hsBanned" placeholder="e.g. neon, cat ears"></label>
+      <label>Signature<input id="hsSignature" placeholder="e.g. one red object in every scene"></label>
+    </fieldset>
+    <div class="row">
+      <button id="wipeBtn" type="button" class="danger">Delete all data</button>
+      <button id="saveBtn" value="save" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" role="status" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
