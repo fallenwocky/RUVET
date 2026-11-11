@@ -267,6 +267,8 @@ test.describe('blocked storage and extreme screens', () => {
     test(`${w}×${h}: no sideways scrolling on any view`, async ({ page, isMobile }) => {
       test.skip(isMobile, 'viewport is set by hand');
       await page.setViewportSize({ width: w, height: h });
+      // Tests block Google Fonts, so layout falls back to whatever the machine has. Force a wide fallback so the result does not depend on it.
+      await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); s.textContent = ':root{--body:"DejaVu Sans",Verdana,sans-serif;--display:"DejaVu Sans",Verdana,sans-serif}'; document.head.append(s); }));
       await open('web', page);
       await toggleTarget(page, 'illustrious');
       await send(page, 'An old repairman fixing a carousel alone in a closed amusement park with a very long title to wrap', 1);
