@@ -211,6 +211,7 @@ dialog { background: var(--panel); color: var(--text); border: 1px solid var(--l
 dialog::backdrop { background: var(--scrim); }
 dialog h2 { margin: 0 0 12px; font: 700 17px var(--display); }
 dialog .field { margin-bottom: 12px; font-size: 13px; }
+dialog .about { margin: -4px 0 14px; font-size: 13px; color: var(--dim); border-left: 3px solid var(--accent); padding: 2px 0 2px 10px; }
 dialog small { font-size: 11.5px; }
 .row { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; }
 .row .btn { border-radius: 10px; padding: 10px 16px; min-height: 42px; font-size: 14px; }
@@ -1638,7 +1639,7 @@ async function renderChats() {
 async function openDrawer() { await renderChats(); $('drawer').classList.add('open'); $('scrim').hidden = false; }
 function closeDrawer() { armed.clear(); $('drawer').classList.remove('open'); $('scrim').hidden = true; }
 function openSettings() {
-  $('setFields').innerHTML = backend.fields.map((f) => `<label class="field">${esc(f.label)}${f.type === 'select'
+  $('setFields').innerHTML = (backend.about ? `<p class="about">${esc(backend.about)}</p>` : '') + backend.fields.map((f) => `<label class="field">${esc(f.label)}${f.type === 'select'
     ? `<select id="f-${f.id}">${f.options.map(([v, l]) => `<option value="${v}"${cfg[f.id] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`
     : `<input id="f-${f.id}" type="${f.type}" autocomplete="off" placeholder="${esc(f.placeholder ?? '')}" value="${esc(cfg[f.id] ?? '')}">`}${f.hint ? `<small>${esc(f.hint)}</small>` : ''}</label>`).join('');
   armed.clear(); $('wipeBtn').textContent = 'Delete all data';
@@ -1897,6 +1898,7 @@ capsReady.then((c) => { if (c?.off && !chat.runs.length) renderThread(); });
   const toBlob = (img) => new Blob([Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0))], { type: img.media_type });
 
   window.RUVET_START({
+    about: 'Claude artifact — runs on your own Claude account; no API key. Usage comes from your Claude plan.',
     fields: [{ id: 'tier', label: 'Claude quality', type: 'select', def: 'default', hint: 'Replies draw on your own Claude usage; no API key is needed.',
       options: [['default', 'Balanced (recommended)'], ['complex', 'Most capable (slower)'], ['quick', 'Fast (shallower)']] }],
     async init() {

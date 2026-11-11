@@ -11,11 +11,41 @@
   <img src="screenshots/desktop-studio.png" alt="The same result on desktop, with the chat history as a sidebar" width="520">
 </p>
 
-## Use it
+## Which version?
 
-- **No set-up:** open the [Claude artifact](https://claude.ai/artifact/8VYXKTLoew7FgWtfZMm7ci) while signed in to claude.ai. It uses your own Claude account; no API key.
-- **Web app with your own API key:** publish `docs/` (on GitHub: *Settings → Pages → Deploy from a branch → `main` / `/docs`*), open it, and enter an Anthropic API key in Settings. Add it to your home screen to install it on a phone.
-- **Locally:** `npm install && npm run serve`, then open http://localhost:8080.
+RUVET. comes in two versions built from the same code. They differ in how they reach Claude, not in what they do. **There is no separate mobile version:** both work on phones and on desktop.
+
+| | **Claude artifact** — no key | **Web app** — your API key |
+| --- | --- | --- |
+| Runs on | a claude.ai page | your own site (GitHub Pages) or your computer |
+| Pays for Claude | whoever opens it, from their own Claude plan | the Anthropic API key entered in Settings, per use |
+| Set-up | none: open the link while signed in to claude.ai | publish `docs/`, then enter a key |
+| Sharing | share the link; each person uses their own Claude | anyone who opens the site enters their own key |
+| Choosing the model | a quality tier: balanced, most capable, fast | a specific Claude model and thinking effort |
+| Images on a phone | in the phone's browser; not in the Claude Android app, which opens no file picker | yes |
+| Token counts | not shown | shown on each result |
+| Home-screen app | no, it stays a claude.ai page | yes, it installs as an app (PWA) |
+| Source | `artifact/ruvet.html`, generated from `docs/` | `docs/` |
+
+**Pick the artifact** if you have a Claude subscription, want nothing to set up, or want to share RUVET. with others at no cost to you. **Pick the web app** if you have an API key, want to choose the exact model, or want it installed like an app.
+
+The Settings screen in either version says which one you are using.
+
+### Open the artifact
+
+1. Open https://claude.ai/artifact/8VYXKTLoew7FgWtfZMm7ci while signed in to claude.ai. It opens for people its owner has shared it with (*Share* menu on the page).
+2. On the first request, allow the page to use Claude. Replies then draw on your own Claude usage.
+3. On Android, attach images from the phone's browser rather than the Claude app.
+
+To run your own copy, publish `artifact/ruvet.html` as a Claude artifact that declares the `sample` capability (with images) and `downloads`.
+
+### Run the web app
+
+1. Publish `docs/`: on GitHub, *Settings → Pages → Deploy from a branch → `main` / `/docs`*. Any static HTTPS host works.
+2. Open the site and enter an Anthropic API key in Settings. The key stays in that browser and is sent only to `api.anthropic.com`.
+3. To install it on a phone: Android/Chrome *Add to Home screen*, iOS/Safari *Share → Add to Home Screen*.
+
+To try it locally: `npm install && npm run serve`, then open http://localhost:8080.
 
 ## The pipeline
 
