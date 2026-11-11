@@ -20,9 +20,9 @@ window.RUVET_START({
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   },
   needs: (cfg) => (cfg.apiKey ? null : 'Enter your Anthropic API key in Settings to start'),
-  async loadPrompt(name) {
+  async loadPart(name) {
     if (!prompts.has(name)) {
-      const r = await fetch(`prompts/SAPPHIRE_v15_${name}.txt`);
+      const r = await fetch(`prompts/sapphire/${name}.txt`);
       if (!r.ok) throw new Error(`Could not load the prompt file: ${name}`);
       prompts.set(name, await r.text());
     }

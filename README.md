@@ -54,7 +54,7 @@ It is assembled from the web app's own files: `python3 artifact/build.py` takes 
 ## Development
 
 - `docs/app.js` — the app; backend-agnostic. `docs/backend-api.js` (Claude API) and `artifact/backend.js` (Claude artifact) are the two backends.
-- `docs/prompts/` — the SAPPHIRE builds and the CRITIC prompt. If you change them, bump the `CACHE` version in `docs/sw.js`.
+- `docs/prompts/sapphire/` — the prompt system in parts: `core.txt` (shared rules), one file per model pack (`description`, `tag`, `hybrid`, plus `booru_shared` for the two tag-based packs) and `critic.txt`. The app assembles a build per request from the core and the packs the target needs (`BUILDS` in `app.js`), so a rule lives in one place and only the selected parts are sent to Claude. To add a model family, add a pack file and a `BUILDS` entry; a second prompt system would get its own folder. If you change a part, bump the `CACHE` version in `docs/sw.js`.
 - `docs/vendor/anthropic.js` — browser bundle of the official `@anthropic-ai/sdk`; update with `npm install && npm run build:vendor`.
 
 A full pipeline run costs two Claude calls per target model (compile and critic). Turn off *critic + auto-fix* in the options to make it one.

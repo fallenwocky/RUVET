@@ -24,6 +24,13 @@ const MODES = [
   { id: 'image', hint: 'Attach an image, add a note if you like' },
   { id: 'discuss', hint: 'Let\'s discuss the idea…' },
 ];
+// A build is the shared core plus the packs for one family of image models; parts live in prompts/sapphire/.
+const BUILDS = {
+  TSUBAKI: { title: 'TSUBAKI BUILD', loaded: 'CORE + DESCRIPTION pack', def: 'tsubaki3', parts: ['core', 'description'] },
+  TAG: { title: 'TAG BUILD', loaded: 'CORE + booru_shared + TAG pack', def: 'illustrious', parts: ['core', 'booru_shared', 'tag'] },
+  ANIMA: { title: 'ANIMA BUILD', loaded: 'CORE + booru_shared + HYBRID pack', def: 'anima', parts: ['core', 'booru_shared', 'hybrid'] },
+  UNIVERSAL: { title: 'UNIVERSAL BUILD', loaded: 'CORE + DESCRIPTION pack + booru_shared + TAG pack + HYBRID pack', def: 'tsubaki3', parts: ['core', 'description', 'booru_shared', 'tag', 'hybrid'] },
+};
 const LENSES = ['literal', 'before', 'after', 'detail', 'environment', 'metaphor', 'scale shift'];
 const TENSIONS = ['contrast object', 'absence', 'misplacement', 'scale', 'aftermath', 'defiance', 'stillness in motion'];
 const ISSUES = ['broken hands', 'extra limbs', 'duplicate figure', 'melted face', 'warped background', 'wrong light', 'plastic look', 'style ignored', 'missing detail', 'gibberish text'];
@@ -275,10 +282,14 @@ function harvestLedger(text) {
 const lastLedger = (text) => [...text.matchAll(/(?:Ledger|Defter):\**\s*(L\s*\|[^\n]+)/g)].map((m) => m[1].trim()).pop() ?? '';
 
 // ---------- request assembly ----------
+async function loadBuild(name) {
+  const b = BUILDS[name], parts = await Promise.all(b.parts.map((p) => backend.loadPart(p)));
+  return `# SAPPHIRE VISION ARCHITECT v15.0 — ${b.title}\nLoaded: ${b.loaded}. Default model: ${b.def}.\n\n${parts.map((t) => t.trim()).join('\n\n')}\n`;
+}
 async function systemFor(target) {
   chat.sys ??= {};
   chat.sys[target] ??= { build: cfg.build === 'universal' ? 'UNIVERSAL' : targetInfo(target).build, mem: memoryBlock(target) };
-  return (await backend.loadPrompt(chat.sys[target].build)) + chat.sys[target].mem;
+  return (await loadBuild(chat.sys[target].build)) + chat.sys[target].mem;
 }
 function compose(text, meta, target, hasImage, notes) {
   const head = [];
@@ -347,7 +358,7 @@ async function pipeline(run, target) {
 async function critic(run, target, out) {
   out.stage = 'critic'; out.critic = { text: '', pending: true }; paint(run);
   const res = await ask({
-    system: await backend.loadPrompt('CRITIC'),
+    system: await backend.loadPart('critic'),
     turns: [{ role: 'user', text: `Target model: ${target}\n\nSAPPHIRE output to audit:\n\n${out.text}` }],
     onText: (t) => { out.critic.text = t; paint(run); },
   });

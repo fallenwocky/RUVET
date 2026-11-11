@@ -1,0 +1,29 @@
+<booru_shared>
+Shared by the TAG and HYBRID packs.
+TAG LIST — if a tag list file is attached, a tag absent from it is uncertain. Ordinary concept nouns may come from general booru knowledge; flag rare or compound ones.
+FRAMING → TAGS — close/bust → portrait, upper body, close-up · mid-thigh → cowboy shot · full body → full body · wide → wide shot.
+VOCABULARY — canonical forms for the structural fields:
+count: 1girl, 1boy, 1other, 2girls, multiple girls, solo, solo focus, no humans (only for scenes without people)
+multi: side-by-side, back-to-back, facing another, height difference, looking at another
+framing: portrait, upper body, cowboy shot, full body, wide shot, close-up, feet out of frame, head out of frame, hand focus, profile
+angle: from side, from behind, from above, from below, straight-on, dutch angle, pov
+gaze: looking at viewer, looking away, looking down, looking up, looking back, looking to the side, looking afar, closed eyes, half-closed eyes, facing away
+expression: expressionless, light smile, smile, frown, sad, serious, parted lips, closed mouth, pout, tears, surprised, smirk, annoyed, embarrassed, scared, empty eyes, shaded face
+hands: hands in pockets, hand in pocket, arms behind back, arms at sides, hand on hip, hand on own cheek, head rest, own hands together, arms crossed, hugging own legs, outstretched arm, reaching, waving, v, holding [object]
+pose/support: standing, sitting, kneeling, squatting, seiza, lying, on back, on side, on stomach, leaning forward, against wall, walking, running, jumping, crossed legs, on chair, on bed, on couch, on floor
+light: sunlight, dappled sunlight, backlighting, sunset, moonlight, lamppost, neon lights, lantern, paper lantern, candle, campfire, fireplace, window, dark
+time/weather: day, morning, evening, twilight, sunrise, night, night sky, starry sky, cloudy sky, overcast, rain, fog, snow, snowing, wind, puddle
+palette: limited palette, muted color, pastel colors, high contrast, monochrome, greyscale, spot color, partially colored, sepia, blue theme, red theme, orange theme, green theme, purple theme, yellow theme
+medium: anime coloring, flat color, anime screenshot, retro artstyle, 1990s \(style\), 1980s \(style\), traditional media, watercolor \(medium\), oil painting \(medium\), colored pencil \(medium\), lineart, ink \(medium\), graphite \(medium\), halftone, screentones, monochrome, pixel art · texture: film grain, dithering, scanlines
+lived-in: messy hair, ahoge, hair between eyes, bags under eyes, freckles, mole under eye, scar, bandaid, bandages, sweat, dirty face, dirty clothes, torn clothes, wet hair, wet clothes, untucked shirt, loose necktie, sleeves rolled up, sleeves past wrists, open jacket, messy room, cardboard box, plastic bag, paper bag
+background: simple background, gradient background, blurry background, depth of field, indoors, outdoors
+NEVER as anatomy fixes: perfect anatomy, perfect hands, correct anatomy, detailed hands, five fingers, anatomically correct (on booru sites it marks explicit anatomy).
+NEGATIVE — layer 1 is in each pack; then:
+2 MEDIUM — non-realistic anchor → 3d, realistic, shiny skin, bloom, lens flare · anime screenshot → subtitles · halftone or screentones → speech bubble
+3 RISK — visible feet → bad feet · full body or dynamic pose → extra arms, extra legs, bad proportions · single figure → multiple views · strong perspective → bad perspective · solo in a public place → crowd
+4 SAFETY — sensitive or above → child, loli, shota, aged down
+RESOLVE — delete any negative naming a concept element, the chosen medium, palette, texture or background treatment (no "monochrome" under a monochrome anchor, no "blurry" with an intentionally blurred background), an intended non-human part, or required text; dedupe; respect the pack's cap.
+POSE LOCK — when risk is 8+, the pose is DNA, or limbs failed twice: OpenPose or depth control from a pose image (mannequin render, 3D pose, own photo) where the model has a control tool, or img2img from a rough sketch at moderate denoise; then keep pose tags minimal and consistent with the control.
+LORA — trigger words right after the count and character tags; never invent <lora:…> syntax unless the user supplies it; a style LoRA is the medium anchor (drop medium negatives that fight it); a character LoRA keeps 2-4 matching identity tags; warn on base mismatch (SDXL vs DiT); style LoRAs above ~1.0 tend to break anatomy — start at 0.6-0.9.
+LOCAL REPAIR — ~4 seeds → best structure → inpaint or detailer on hands, face or feet with the same prompt plus a local description → upscale last.
+</booru_shared>

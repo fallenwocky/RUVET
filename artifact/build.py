@@ -20,8 +20,8 @@ def inline(text, what):
     return text
 
 prompts = "\n".join(
-    f'<script type="text/plain" id="p-{n}">\n{inline(read(docs / "prompts" / f"SAPPHIRE_v15_{n}.txt"), n)}</script>'
-    for n in ["TSUBAKI", "TAG", "ANIMA", "CRITIC"]
+    f'<script type="text/plain" id="p-{p.stem}">\n{inline(read(p), p.name)}</script>'
+    for p in sorted((docs / "prompts" / "sapphire").glob("*.txt"))
 )
 out = f"""<title>RUVET.</title>
 <meta name="claude:viewport-fit-sides" content="cover">
