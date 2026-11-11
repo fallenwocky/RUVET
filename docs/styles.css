@@ -226,3 +226,13 @@ dialog small { font-size: 11.5px; }
   #toast { left: calc(50% + 140px); }
   #opts { max-height: none; }
 }
+/* Short screens (a phone held sideways): view tabs join the header row, and the composer scrolls under a pinned input row. */
+@media (max-height: 520px) {
+  .bar { flex-wrap: nowrap; padding-block: 2px; }
+  .bar h1 { flex: none; margin-right: 6px; }
+  .seg { order: 0; flex: 1 1 auto; margin: 0 4px; }
+  .seg button { min-height: 30px; padding: 4px 6px; }
+  #composer { max-height: 66vh; overflow-y: auto; padding-bottom: 0; }
+  #opts { max-height: 30vh; }
+  .inputrow { position: sticky; bottom: 0; background: var(--panel); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
+}
