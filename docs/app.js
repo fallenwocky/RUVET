@@ -948,7 +948,7 @@ async function renderChats() {
 async function openDrawer() { await renderChats(); $('drawer').classList.add('open'); $('scrim').hidden = false; }
 function closeDrawer() { armed.clear(); $('drawer').classList.remove('open'); $('scrim').hidden = true; }
 function openSettings() {
-  $('setFields').innerHTML = backend.fields.map((f) => `<label class="field">${esc(f.label)}${f.type === 'select'
+  $('setFields').innerHTML = (backend.about ? `<p class="about">${esc(backend.about)}</p>` : '') + backend.fields.map((f) => `<label class="field">${esc(f.label)}${f.type === 'select'
     ? `<select id="f-${f.id}">${f.options.map(([v, l]) => `<option value="${v}"${cfg[f.id] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`
     : `<input id="f-${f.id}" type="${f.type}" autocomplete="off" placeholder="${esc(f.placeholder ?? '')}" value="${esc(cfg[f.id] ?? '')}">`}${f.hint ? `<small>${esc(f.hint)}</small>` : ''}</label>`).join('');
   armed.clear(); $('wipeBtn').textContent = 'Delete all data';

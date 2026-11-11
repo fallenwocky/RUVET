@@ -6,6 +6,7 @@ const FALLBACK_MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude
 const prompts = new Map();
 
 window.RUVET_START({
+  about: 'Web app — calls the Claude API with your own Anthropic API key. Usage is billed to that key.',
   fields: [
     { id: 'apiKey', label: 'Anthropic API key', type: 'password', placeholder: 'sk-ant-…', hint: 'Stored only on this device and sent directly to api.anthropic.com. Get a key at console.anthropic.com' },
     { id: 'model', label: 'Claude model', type: 'select', def: 'claude-opus-5-5', options: [

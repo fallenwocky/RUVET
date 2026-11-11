@@ -89,6 +89,11 @@ for (const kind of ['web', 'artifact']) {
       await expect(page.locator('#input')).toHaveValue('An old repairman fixing a carousel');
     });
 
+    test('Settings says which version this is', async ({ page }) => {
+      await page.click('#setBtn');
+      await expect(page.locator('#settings .about')).toContainText(kind === 'web' ? 'Web app — calls the Claude API with your own Anthropic API key' : 'Claude artifact — runs on your own Claude account; no API key');
+    });
+
     test('sparks five ideas and puts the chosen one in the composer', async ({ page }) => {
       await page.click('#sparkBtn');
       await expect(page.locator('[data-idea]')).toHaveCount(5);

@@ -15,6 +15,7 @@
   const toBlob = (img) => new Blob([Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0))], { type: img.media_type });
 
   window.RUVET_START({
+    about: 'Claude artifact — runs on your own Claude account; no API key. Usage comes from your Claude plan.',
     fields: [{ id: 'tier', label: 'Claude quality', type: 'select', def: 'default', hint: 'Replies draw on your own Claude usage; no API key is needed.',
       options: [['default', 'Balanced (recommended)'], ['complex', 'Most capable (slower)'], ['quick', 'Fast (shallower)']] }],
     async init() {

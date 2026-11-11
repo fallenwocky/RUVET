@@ -13,6 +13,9 @@
 - The image button and *Review render* are now labels for their file inputs, so the browser opens the picker itself; some app web views ignore a scripted click. Where no picker opens at all (reported in the Claude Android app), a touch screen gets a hint to open RUVET in the phone's browser or the web app.
 - Typing a note in the render-feedback form right after tapping an issue could lose the note.
 
+### Docs
+- README: a *Which version?* table comparing the Claude artifact and the web app (who pays, set-up, sharing, model choice, images on a phone, home-screen install), and how to open or run each. Settings now names the version in use.
+
 ### Tests
 - `tests/images.spec.js`: image attach and render review without `createImageBitmap` or with it failing, a canvas that cannot re-encode, HEIC, and a Claude view without image support.
 - `tests/stress.spec.js`: hostile markup in every place Claude's text or user text is shown, empty and malformed replies, API errors, refusals and cut-off replies, a double tap, stopping a slow reply, switching views mid-run, stopping the test bench, 40 runs in one chat, a 1500-prompt library, a 200 KB idea with pathological markdown, corrupt and oversized PNGs, a hostile backup with a `__proto__` key, junk library imports, blocked localStorage and IndexedDB, 320×568 / 568×320 / 2560×1440 screens, and CJK / RTL / emoji text.
