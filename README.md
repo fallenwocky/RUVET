@@ -1,67 +1,66 @@
 # RUVET.
 
-RUVET. is a prompt pipeline for anime and illustration image models. Give it an idea, an image, a rough prompt or a failed render, pick the image models you use, and it returns a prompt written in each model's own dialect — then lints it, has a second pass audit it, applies the fix, and remembers how your renders turned out. It runs the SAPPHIRE Vision Architect v15 prompt system on Claude.
+[![CI](https://github.com/fallenwocky/RUVET/actions/workflows/ci.yml/badge.svg)](https://github.com/fallenwocky/RUVET/actions/workflows/ci.yml)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
-It works on phones and on desktop: on a wide screen the chat history is a permanent sidebar and Enter sends (Shift+Enter makes a new line).
+**A prompt pipeline for anime and illustration image models.** Describe a picture, pick the image models you use, and RUVET. writes a prompt in each model's own dialect — then lints it, has a second pass audit and correct it, and learns from how your renders turned out. It runs the SAPPHIRE Vision Architect v15 prompt system on Claude. It does not generate images.
+
+<p align="center">
+  <img src="screenshots/phone-studio.png" alt="A result on a phone: the pipeline stepper, dialect and lean checks, and the critic's corrected prompt" width="300">
+  &nbsp;
+  <img src="screenshots/desktop-studio.png" alt="The same result on desktop, with the chat history as a sidebar" width="520">
+</p>
+
+## Use it
+
+- **No set-up:** open the [Claude artifact](https://claude.ai/artifact/8VYXKTLoew7FgWtfZMm7ci) while signed in to claude.ai. It uses your own Claude account; no API key.
+- **Web app with your own API key:** publish `docs/` (on GitHub: *Settings → Pages → Deploy from a branch → `main` / `/docs`*), open it, and enter an Anthropic API key in Settings. Add it to your home screen to install it on a phone.
+- **Locally:** `npm install && npm run serve`, then open http://localhost:8080.
 
 ## The pipeline
 
 Every request runs through these stages, shown as a stepper on each result:
 
-1. **Compile** — SAPPHIRE stages the scene (framing, hands, support, light), scores its structural risk, and writes the positive and negative prompts in the target model's syntax.
-2. **Lint** — deterministic checks in the browser, no model call, in two groups. *Dialect*: the target model's own syntax — tag or word budget, weight limits, base and rating or safety tags per model, underscores and unescaped parentheses, description models fed tag strings, negatives that contradict the positive. *Bloat*: repeated tags or words, more than one framing, angle, gaze or palette, quality piles, narration ("the image shows"), and adjectives with nothing to draw. Each result shows a *dialect* and a *lean* pill, and *Fix these findings* sends exactly the findings back for a deletion-only correction.
-3. **Critic** — a second, independent pass audits the output against the rules and returns PASS, FIX or REJECT.
-4. **Fix** — on FIX, the critic's corrected blocks become the final prompt; the original report stays available underneath.
-5. **Review** — after you render, give the image back with *Review render*. Claude looks at it next to the prompt, says what broke and what held up, and offers *Repair with this render*, which sends the image and the diagnosis through repair mode.
-6. **Learn** — every review (or a manual *Worked* / *Failed* mark) is kept per model and used in later chats.
+1. **Compile** — SAPPHIRE stages the scene (one moment, framing, a state for every visible hand, support, one sourced light), scores how likely the render is to break, and writes the positive and negative prompts in the target model's syntax.
+2. **Lint** — deterministic checks in the browser, no model call. *Dialect*: the target's own syntax — tag or word budget, weights, base and rating or safety tags per model, underscores and parentheses, Midjourney parameters, negatives on models without a negative field, LoRA base and trigger words. *Bloat*: repeated tags or words, more than one framing, angle, gaze or palette, quality piles, narration, adjectives with nothing to draw.
+3. **Critic** — an independent pass audits the output and returns PASS, FIX or REJECT.
+4. **Fix** — on FIX, the critic's corrected blocks become the final prompt; the original report stays underneath. *Fix these findings* sends any remaining lint findings back for a deletion-only correction.
+5. **Review** — give the rendered image back with *Review render*. Claude compares it with the prompt, says what broke and what held up, and offers *Repair with this render*.
+6. **Learn** — every review, or a manual *Worked* / *Failed* mark, is kept per model and used in later chats.
 
-## Lean by rule
+## Writing for the selected model
 
-Most AI-written prompts are long because length looks like effort. RUVET.'s prompts carry an economy rule instead: every term must change the picture, each thing is said once, each structural field gets one value, and a tag budget is a ceiling rather than a target. The compiler applies it, the critic audits it (its fix for padding is deletion, never rewording), and the lint measures it.
+- **One core, one pack per model family.** Tag models (Illustrious, NoobAI, Pony V6), hybrid models (Anima, Anima Aesthetic) and description models (Tsubaki.3, Flux, Qwen-Image, GPT-image, Midjourney) each get their own syntax, budget, quality and rating rules. The description pack adds per-model notes: Flux and GPT-image have no working negative field, Midjourney takes `--ar` and `--no` in the prompt, Qwen-Image can render text.
+- **Lean by rule.** Most AI-written prompts are long because length looks like effort. RUVET.'s prompts carry an economy rule instead: every term must change the picture, each thing is said once, each structural field gets one value, and a tag budget is a ceiling rather than a target. The compiler applies it, the critic audits it (its fix for padding is deletion), and the lint measures it. Each pack also shows the compiler one weak → strong example of its own economy.
+- **Measured, not assumed.** The *Test* view runs a fixed set of ideas on the models you pick and tabulates average length, dialect and bloat findings before and after the critic, verdicts, risk and tokens, tagged with a hash of the prompt version. Run it before and after a prompt change.
 
-## What it does
+<p align="center"><img src="screenshots/desktop-test.png" alt="The Test view: one run over three models, with length, findings, critic verdicts and risk per model" width="720"></p>
 
-- **Several models from one idea.** Pick up to four targets (Tsubaki.3, Flux, Qwen-Image, GPT-image, Midjourney, Illustrious, NoobAI, Pony V6, Anima, Anima Aesthetic). Each gets its own compile and audit, shown as tabs, and each keeps its own conversation branch for follow-ups.
-- **Memory that carries across chats.** Per-model lessons (condensed from your render results on request, and editable), your house style (typed in, or inferred from the prompts you saved), and a diversity ledger so new chats do not repeat the lens, light, palette and staging of the last ones.
-- **Kit.** Save the characters you reuse (identity, outfit, notes) and your LoRAs (trigger words, weight, type, base model), then pick them per request. Lint flags a LoRA whose base does not run on the target model, a missing trigger and an over-weighted style LoRA.
-- **Reads prompts out of PNGs.** Attach a PNG from A1111, Forge or ComfyUI and the embedded prompt and settings are read on the device and placed in the composer, ready to audit or repair.
-- **Backup.** One file holds chats, library, kit and memory (never the API key) and restores them on any device.
-- **Creative direction.** Force a lens (before, after, detail, environment, metaphor…) or a tension type, set boldness from safe to bold, or use *Spark* to get five concept seeds from a theme.
-- **Modes:** auto · generate · variants · audit · repair · image · discuss, plus compact output.
-- **Model-specific writing.** Each target follows its own pack, and the natural-language targets carry their own notes on top: Flux and GPT-image have no working negative field, so avoidance goes into the positive; Midjourney gets `--ar` and `--no` at the end of the prompt; Qwen-Image may render text. Each pack also shows the compiler one weak → strong example of its own economy.
-- **Check locally, for free.** In audit mode, *check locally* lints a pasted prompt against every selected model without calling Claude.
-- **Test bench.** The *Test* view runs a fixed set of ideas through the pipeline on the models you pick and tabulates average length, dialect and bloat findings (before and after the critic), critic verdicts, risk and tokens, tagged with a hash of the prompt version. Run it before and after a prompt change to see whether the change helped; *Copy results as JSON* exports a run.
-- **Library.** Keep prompts, search and filter them, remix one into variants, export or import as JSON.
-- Image input (pick a file, or paste one on desktop). Everything is stored on the device.
+## Everything else
 
-### How this differs from similar tools
+- **Several models from one idea** — up to four per request, each with its own tab and conversation branch.
+- **Memory across chats** — per-model lessons (condensed from your render results, editable), house style (typed, or inferred from your saved prompts) and a diversity ledger so new chats do not repeat recent lens, light, palette and staging.
+- **Creative direction** — force a lens or a tension type, set boldness, or *Spark* five concept seeds from a theme.
+- **Kit** — recurring characters (identity, outfit, notes) and LoRAs (trigger, weight, type, base), picked per request.
+- **Library** — saved prompts with search, remix into variants, JSON export and import.
+- **Reads prompts out of PNGs** from A1111, Forge and ComfyUI, on the device.
+- **Check locally, free** — in audit mode, lint a pasted prompt against every selected model without calling Claude.
+- **Backup** — one file with chats, library, kit and memory; restore it on any device.
+- Modes: auto, generate, variants, audit, repair, image, discuss. Phone and desktop layouts; light and dark.
 
-Prompt upsamplers such as [TIPO / DanTagGen](https://github.com/KohakuBlueleaf/z-tipo-extension) and [sd-danbooru-tags-upsampler](https://www.github.com/p1atdev/sd-danbooru-tags-upsampler) expand a prompt with a small local model, and tag builders such as [danbooru-diffusion-prompt-builder](https://repos.ecosyste.ms/hosts/GitHub/repositories/wfjsw%2Fdanbooru-diffusion-prompt-builder) help you pick tags by hand. RUVET. is a different kind of tool: it plans the picture before writing it (one moment, one light source, a state for every visible hand), scores how likely the render is to break, audits and corrects its own output, writes the same idea for tag, hybrid and description models, and adjusts to your reported render results. It needs Claude to do so, and it does not generate images.
+## How it differs from similar tools
 
-## Two versions, one codebase
+Prompt upsamplers such as [TIPO / DanTagGen](https://github.com/KohakuBlueleaf/z-tipo-extension) and [sd-danbooru-tags-upsampler](https://github.com/p1atdev/sd-danbooru-tags-upsampler) expand a prompt with a small local model, and tag builders such as [danbooru-diffusion-prompt-builder](https://github.com/wfjsw/danbooru-diffusion-prompt-builder) help you pick tags by hand. RUVET. plans the picture before writing it, scores how likely the render is to break, audits and corrects its own output, writes the same idea for tag, hybrid and description models, and adjusts to your render results. In exchange it needs Claude, and it does not generate images.
 
-### Web app (`docs/`)
+## Cost and privacy
 
-A static, installable web app (PWA) with no build step. It calls the Claude API directly from the browser, so you enter your own Anthropic API key in Settings; the key is kept only on your device (`localStorage`).
-
-1. **Publish:** on GitHub, open this repository's *Settings → Pages*, choose *Deploy from a branch*, and select `main` and the `/docs` folder.
-2. **Install on a phone:** open the page → Android/Chrome: *Add to Home screen* · iOS/Safari: *Share → Add to Home Screen*.
-3. **Try locally:** `npm run serve` → http://localhost:8080
-
-### Keyless version (`artifact/`)
-
-`artifact/ruvet.html` is the same app as a single file, published as an artifact on claude.ai. It needs no API key; replies draw on the Claude usage of whoever opens the page. Instead of a Claude model you choose a quality tier, and there is no UNIVERSAL build option.
-
-It is assembled from the web app's own files: `python3 artifact/build.py` takes the markup, `styles.css`, `app.js` and the prompts from `docs/`, and swaps `docs/backend-api.js` for `artifact/backend.js`. After any change, rebuild and republish the artifact.
+- A full pipeline run is two Claude calls per target model (compile and critic); turn off *critic + auto-fix* to make it one. Render reviews and *Spark* are one call each. The web app shows the tokens each result used.
+- Chats, library, kit, memory and settings stay in your browser. The web app sends your API key only to `api.anthropic.com`; backups never include it. The artifact version uses the viewer's own Claude account and stores nothing outside their browser.
 
 ## Development
 
-- `docs/app.js` — the app; backend-agnostic. `docs/backend-api.js` (Claude API) and `artifact/backend.js` (Claude artifact) are the two backends.
-- `docs/prompts/sapphire/` — the prompt system in parts: `core.txt` (shared rules), one file per model pack (`description`, `tag`, `hybrid`, plus `booru_shared` for the two tag-based packs) and `critic.txt`. The app assembles a build per request from the core and the packs the target needs (`BUILDS` in `app.js`), so a rule lives in one place and only the selected parts are sent to Claude. To add a model family, add a pack file and a `BUILDS` entry; a second prompt system would get its own folder. If you change a part, bump the `CACHE` version in `docs/sw.js`.
-- `docs/vendor/anthropic.js` — browser bundle of the official `@anthropic-ai/sdk`; update with `npm install && npm run build:vendor`.
-
-A full pipeline run costs two Claude calls per target model (compile and critic). Turn off *critic + auto-fix* in the options to make it one. The web app shows the tokens each result used; the artifact version cannot see them.
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short: `npm test` runs the Playwright suite for both versions on phone and desktop against a mocked Claude; after changing `docs/`, run `npm run build:artifact`; prompt changes come with Test view numbers. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)

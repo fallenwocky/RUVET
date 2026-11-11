@@ -1,13 +1,28 @@
 {
   "name": "ruvet",
   "private": true,
-  "description": "RUVET. — SAPPHIRE Vision Architect web app (the docs/ folder is served as a static site)",
+  "description": "RUVET. — a prompt pipeline for anime and illustration image models. docs/ is the web app; artifact/ruvet.html is the single-file Claude artifact.",
   "scripts": {
-    "build:vendor": "esbuild vendor-entry.js --bundle --format=esm --platform=browser --minify --outfile=docs/vendor/anthropic.js",
-    "serve": "npx --yes serve docs -l 8080"
+    "test": "playwright test",
+    "check": "node --check docs/app.js && node --check docs/backend-api.js && node --check docs/sw.js && node --check artifact/backend.js",
+    "check:artifact": "python3 artifact/build.py && git diff --exit-code -- artifact/ruvet.html",
+    "build:artifact": "python3 artifact/build.py",
+    "build:vendor": "esbuild tools/vendor-entry.js --bundle --format=esm --platform=browser --minify --outfile=docs/vendor/anthropic.js",
+    "screenshots": "node tools/screenshots.js",
+    "serve": "node tests/server.js 8080"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^1.7.0",
+    "@playwright/test": "1.63.0",
     "esbuild": "^0.28.2"
+  },
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fallenwocky/RUVET.git"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
