@@ -13,6 +13,8 @@
 - The image button and *Review render* are now labels for their file inputs, so the browser opens the picker itself; some app web views ignore a scripted click. Where no picker opens at all (reported in the Claude Android app), a touch screen gets a hint to open RUVET in the phone's browser or the web app.
 - Typing a note in the render-feedback form right after tapping an issue could lose the note.
 
+- On a phone, *Review render* sat at the end of a long report and was easy to miss; a short row with *Copy prompt* and *Review render* now sits right under the prompt, and the first copy points at the review step once.
+
 ### Docs
 - README: a *Which version?* table comparing the Claude artifact and the web app (who pays, set-up, sharing, model choice, images on a phone, home-screen install), and how to open or run each. Settings now names the version in use. An *On a phone* section explains how to put either version on the home screen.
 

@@ -105,6 +105,29 @@ test.describe('when the app opens no picker', () => {
     await expect(page.locator('#toast')).not.toContainText('Nothing opened?');
   });
 
+  test('on a phone, Review render also sits right under the prompt', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'the short row is for narrow screens');
+    await openArtifact(page);
+    await send(page, 'An idea', 1);
+    const quick = page.locator('[data-act="qreview"]');
+    await expect(quick).toBeVisible();
+    await expect(quick).toHaveAttribute('for', 'reviewFile');
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), quick.click()]);
+    await chooser.setFiles(file('render.png', 'image/png'));
+    await expect(page.locator('.review')).toContainText('failed');
+  });
+
+  test('the first copy points at Review render, once', async ({ page }) => {
+    await openArtifact(page);
+    await send(page, 'An idea', 1);
+    await page.click('[data-act="copyp"]');
+    await expect(page.locator('#toast')).toContainText('tap Review render', { timeout: 4000 });
+    await page.waitForTimeout(500);
+    await page.click('[data-act="copyp"]');
+    await page.waitForTimeout(1800);
+    await expect(page.locator('#toast')).not.toContainText('tap Review render');
+  });
+
   test('the image button and Review render are labels for their file inputs', async ({ page }) => {
     await openArtifact(page);
     await expect(page.locator('#imgBtn')).toHaveAttribute('for', 'file');
