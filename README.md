@@ -47,6 +47,20 @@ To run your own copy, publish `artifact/ruvet.html` as a Claude artifact that de
 
 To try it locally: `npm install && npm run serve`, then open http://localhost:8080.
 
+### On a phone
+
+Neither version comes from an app store; both are web pages you can put on the home screen.
+
+**Claude artifact (Claude account, no key)**
+1. Open the artifact link in **Chrome** (Android) or **Safari** (iPhone), signed in to claude.ai.
+2. Android: **⋮ → Add to Home screen**. iPhone: **Share → Add to Home Screen**.
+3. The icon opens the page in the browser, so attaching images works. It is a shortcut to the claude.ai page, not an installed app; people the link has not been shared with cannot open it.
+
+**Web app (API key, installs as an app)**
+1. Once `docs/` is published (see *Run the web app*), open the site in Chrome or Safari, e.g. `https://<user>.github.io/RUVET/`.
+2. Android: **⋮ → Install app** (or *Add to Home screen*). iPhone: **Share → Add to Home Screen**.
+3. It opens in its own window with its own icon. Enter an Anthropic API key in Settings on first use.
+
 ## The pipeline
 
 Every request runs through these stages, shown as a stepper on each result:

@@ -14,7 +14,7 @@
 - Typing a note in the render-feedback form right after tapping an issue could lose the note.
 
 ### Docs
-- README: a *Which version?* table comparing the Claude artifact and the web app (who pays, set-up, sharing, model choice, images on a phone, home-screen install), and how to open or run each. Settings now names the version in use.
+- README: a *Which version?* table comparing the Claude artifact and the web app (who pays, set-up, sharing, model choice, images on a phone, home-screen install), and how to open or run each. Settings now names the version in use. An *On a phone* section explains how to put either version on the home screen.
 
 ### Tests
 - `tests/images.spec.js`: image attach and render review without `createImageBitmap` or with it failing, a canvas that cannot re-encode, HEIC, and a Claude view without image support.
