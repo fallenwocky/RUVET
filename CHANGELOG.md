@@ -10,6 +10,7 @@
 
 - Attaching images on phones: decoding no longer depends on `createImageBitmap` alone (it falls back to an image element, and to sending a small original when re-encoding runs out of memory); HEIC photos the browser cannot read get instructions; file inputs are no longer `display:none`, which some mobile web views refuse to open.
 - In a Claude view that cannot take images, the image button now explains why instead of disappearing, and prompts embedded in PNGs are still read.
+- The image button and *Review render* are now labels for their file inputs, so the browser opens the picker itself; some app web views ignore a scripted click. Where no picker opens at all (reported in the Claude Android app), a touch screen gets a hint to open RUVET in the phone's browser or the web app.
 - Typing a note in the render-feedback form right after tapping an issue could lose the note.
 
 ### Tests

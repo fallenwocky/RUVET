@@ -36,6 +36,8 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .gem { color: var(--accent); }
 .icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--dim); flex: none; }
 .icon:active { background: var(--panel2); color: var(--text); }
+label.icon, label.btn { cursor: pointer; user-select: none; -webkit-user-select: none; }
+label.btn { display: inline-flex; align-items: center; }
 .seg { order: 5; flex: 1 1 100%; display: flex; gap: 4px; background: var(--panel2); border-radius: 12px; padding: 3px; margin: 2px 8px 0; }
 .seg { min-width: 0; }
 .seg button { flex: 1 1 0; min-width: 0; border-radius: 9px; padding: 6px 4px; font-size: 13px; color: var(--dim); min-height: 34px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -278,7 +280,7 @@ dialog small { font-size: 11.5px; }
     </div>
     <div id="attach" hidden><img alt="Attached image"><button id="attachDel" class="icon" aria-label="Remove image"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="inputrow">
-      <button id="imgBtn" class="icon" aria-label="Attach image"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg></button>
+      <label id="imgBtn" class="icon" for="file" role="button" tabindex="0" aria-label="Attach image"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg></label>
       <button id="sparkBtn" class="icon" aria-label="Spark ideas" title="Spark ideas"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7z"/></svg></button>
       <textarea id="input" rows="1" placeholder="Type an idea, a prompt or a problem…"></textarea>
       <button id="sendBtn" class="send" aria-label="Send"><svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><svg class="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>
@@ -851,7 +853,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const targetInfo = (id) => TARGETS.find((t) => t.id === id) ?? TARGETS[0];
 const GEM = '<svg class="gem" viewBox="0 0 24 24"><path d="M7 3h10l5 6-10 12L2 9z"/><path d="M2 9h20M7 3l5 6 5-6M12 9v12"/></svg>';
 let toastTimer;
-function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3600); }
+function toast(msg, ms = 3600) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms); }
 function copyText(text, codeEl) {
   const fallback = () => {
     if (codeEl) { const r = document.createRange(); r.selectNodeContents(codeEl); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Text selected — copy it'); }
@@ -1278,7 +1280,7 @@ function outHTML(run, target) {
     h.push(`<div class="actions"><button class="btn primary" data-act="copyp">Copy prompt</button>${b.neg ? '<button class="btn" data-act="copyn">Copy negative</button>' : ''}`
       + `<button class="btn" data-act="save">Save</button>`
       + (out.done && !out.critic ? '<button class="btn" data-act="critic">Run critic</button>' : '')
-      + '<button class="btn" data-act="review">Review render</button>'
+      + '<label class="btn" for="reviewFile" role="button" data-act="review">Review render</label>'
       + `<button class="btn ${out.fb === 'worked' ? 'on' : ''}" data-act="worked">Worked</button><button class="btn ${out.fb === 'failed' ? 'off' : ''}" data-act="failed">Failed</button></div>`);
     if (run.fbOpen === target) {
       const d = run.fbDraft ?? { issues: [] };
@@ -1719,7 +1721,21 @@ async function attachFile(f) {
   } else if (!caps.images) toast(NO_IMAGES);
 }
 let reviewFor = null;
-$('imgBtn').addEventListener('click', () => $('file').click());
+// Some app web views (the Claude Android app among them, as reported) open no picker at all for a page's file input.
+// The page cannot tell for sure, but on a touch screen an opened picker takes the focus away; if nothing happens, say what to do.
+const NO_PICKER = 'Nothing opened? This app may not let pages pick files. Open RUVET in your phone\'s browser at claude.ai, or use the web app — both can attach images.';
+function watchPicker(input) {
+  if (!matchMedia('(hover: none)').matches) return;
+  let opened = false; const mark = () => { opened = true; };
+  window.addEventListener('blur', mark, { once: true }); document.addEventListener('visibilitychange', mark, { once: true });
+  input.addEventListener('change', mark, { once: true }); input.addEventListener('cancel', mark, { once: true });
+  setTimeout(() => {
+    window.removeEventListener('blur', mark); document.removeEventListener('visibilitychange', mark);
+    if (!opened && document.visibilityState === 'visible') toast(NO_PICKER, 9000);
+  }, 1800);
+}
+$('imgBtn').addEventListener('click', () => watchPicker($('file')));
+$('imgBtn').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } });
 $('file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) attachFile(f); });
 $('reviewFile').addEventListener('change', async (e) => {
   const f = e.target.files[0]; e.target.value = ''; if (!f || !reviewFor) return;
@@ -1764,7 +1780,8 @@ thread.addEventListener('click', (e) => {
   else if (act === 'fixlint') {
     send({ text: `Fix only these findings in the prompt below; change nothing else and do not add anything.\n${out.lint.items.filter((i) => i.lv !== 'info').map((i) => `- ${i.m}`).join('\n')}\n\npositive: ${b.pos}${b.neg ? `\nnegative: ${b.neg}` : ''}`, image: null, meta: { mode: 'audit', targets: [target] } });
   }
-  else if (act === 'review') { if (!caps.images) return toast(NO_IMAGES); reviewFor = { run, target }; $('reviewFile').click(); }
+  // A label for the file input: the browser opens the picker itself, which some app web views allow where a scripted click is ignored.
+  else if (act === 'review') { if (!caps.images) { e.preventDefault(); return toast(NO_IMAGES); } reviewFor = { run, target }; watchPicker($('reviewFile')); }
   else if (act === 'rrepair') {
     const v = out.review;
     send({ text: `The render failed${v.issues.length ? `: ${v.issues.join(', ')}` : ''}.${v.note ? ` ${v.note}` : ''} The attached image is the failed render.`, image: v.image, meta: { mode: 'repair', targets: [target] } });

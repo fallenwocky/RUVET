@@ -86,3 +86,29 @@ test.describe('a Claude view that cannot take images', () => {
     expect(app.calls.every((c) => !c.image)).toBe(true);
   });
 });
+
+test.describe('when the app opens no picker', () => {
+  test('a touch screen gets told what to do instead of silence', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'the hint is for touch screens');
+    // Stand-in for a web view that ignores file inputs: the input does nothing when activated.
+    await page.addInitScript(() => document.addEventListener('click', (e) => { if (e.target.closest?.('label[for]')) e.preventDefault(); }, true));
+    await openArtifact(page);
+    await page.click('#imgBtn');
+    await expect(page.locator('#toast')).toContainText('Nothing opened?', { timeout: 4000 });
+  });
+
+  test('no hint when the picker opens and a file is chosen', async ({ page }) => {
+    await openArtifact(page);
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#imgBtn')]);
+    await chooser.setFiles(file('photo.png', 'image/png'));
+    await page.waitForTimeout(2200);
+    await expect(page.locator('#toast')).not.toContainText('Nothing opened?');
+  });
+
+  test('the image button and Review render are labels for their file inputs', async ({ page }) => {
+    await openArtifact(page);
+    await expect(page.locator('#imgBtn')).toHaveAttribute('for', 'file');
+    await send(page, 'An idea', 1);
+    await expect(page.locator('[data-act="review"]')).toHaveAttribute('for', 'reviewFile');
+  });
+});

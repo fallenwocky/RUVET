@@ -163,7 +163,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const targetInfo = (id) => TARGETS.find((t) => t.id === id) ?? TARGETS[0];
 const GEM = '<svg class="gem" viewBox="0 0 24 24"><path d="M7 3h10l5 6-10 12L2 9z"/><path d="M2 9h20M7 3l5 6 5-6M12 9v12"/></svg>';
 let toastTimer;
-function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3600); }
+function toast(msg, ms = 3600) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms); }
 function copyText(text, codeEl) {
   const fallback = () => {
     if (codeEl) { const r = document.createRange(); r.selectNodeContents(codeEl); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Text selected — copy it'); }
@@ -590,7 +590,7 @@ function outHTML(run, target) {
     h.push(`<div class="actions"><button class="btn primary" data-act="copyp">Copy prompt</button>${b.neg ? '<button class="btn" data-act="copyn">Copy negative</button>' : ''}`
       + `<button class="btn" data-act="save">Save</button>`
       + (out.done && !out.critic ? '<button class="btn" data-act="critic">Run critic</button>' : '')
-      + '<button class="btn" data-act="review">Review render</button>'
+      + '<label class="btn" for="reviewFile" role="button" data-act="review">Review render</label>'
       + `<button class="btn ${out.fb === 'worked' ? 'on' : ''}" data-act="worked">Worked</button><button class="btn ${out.fb === 'failed' ? 'off' : ''}" data-act="failed">Failed</button></div>`);
     if (run.fbOpen === target) {
       const d = run.fbDraft ?? { issues: [] };
@@ -1031,7 +1031,21 @@ async function attachFile(f) {
   } else if (!caps.images) toast(NO_IMAGES);
 }
 let reviewFor = null;
-$('imgBtn').addEventListener('click', () => $('file').click());
+// Some app web views (the Claude Android app among them, as reported) open no picker at all for a page's file input.
+// The page cannot tell for sure, but on a touch screen an opened picker takes the focus away; if nothing happens, say what to do.
+const NO_PICKER = 'Nothing opened? This app may not let pages pick files. Open RUVET in your phone\'s browser at claude.ai, or use the web app — both can attach images.';
+function watchPicker(input) {
+  if (!matchMedia('(hover: none)').matches) return;
+  let opened = false; const mark = () => { opened = true; };
+  window.addEventListener('blur', mark, { once: true }); document.addEventListener('visibilitychange', mark, { once: true });
+  input.addEventListener('change', mark, { once: true }); input.addEventListener('cancel', mark, { once: true });
+  setTimeout(() => {
+    window.removeEventListener('blur', mark); document.removeEventListener('visibilitychange', mark);
+    if (!opened && document.visibilityState === 'visible') toast(NO_PICKER, 9000);
+  }, 1800);
+}
+$('imgBtn').addEventListener('click', () => watchPicker($('file')));
+$('imgBtn').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } });
 $('file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) attachFile(f); });
 $('reviewFile').addEventListener('change', async (e) => {
   const f = e.target.files[0]; e.target.value = ''; if (!f || !reviewFor) return;
@@ -1076,7 +1090,8 @@ thread.addEventListener('click', (e) => {
   else if (act === 'fixlint') {
     send({ text: `Fix only these findings in the prompt below; change nothing else and do not add anything.\n${out.lint.items.filter((i) => i.lv !== 'info').map((i) => `- ${i.m}`).join('\n')}\n\npositive: ${b.pos}${b.neg ? `\nnegative: ${b.neg}` : ''}`, image: null, meta: { mode: 'audit', targets: [target] } });
   }
-  else if (act === 'review') { if (!caps.images) return toast(NO_IMAGES); reviewFor = { run, target }; $('reviewFile').click(); }
+  // A label for the file input: the browser opens the picker itself, which some app web views allow where a scripted click is ignored.
+  else if (act === 'review') { if (!caps.images) { e.preventDefault(); return toast(NO_IMAGES); } reviewFor = { run, target }; watchPicker($('reviewFile')); }
   else if (act === 'rrepair') {
     const v = out.review;
     send({ text: `The render failed${v.issues.length ? `: ${v.issues.join(', ')}` : ''}.${v.note ? ` ${v.note}` : ''} The attached image is the failed render.`, image: v.image, meta: { mode: 'repair', targets: [target] } });
