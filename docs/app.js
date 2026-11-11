@@ -573,6 +573,8 @@ function outHTML(run, target) {
     if (out.usage) pills.push(`<span class="pill" title="Claude tokens for this result">${kfmt(out.usage.in)} in · ${kfmt(out.usage.out)} out</span>`);
     if (out.fb) pills.push(`<span class="pill ${out.fb === 'worked' ? 'good' : 'bad'}">${out.fb}</span>`);
     h.push(`<div class="sum">${pills.join('')}</div>`);
+    // On a phone the full action row sits below a long report; the two actions used most also sit here, by the prompt.
+    if (done) h.push('<div class="quick"><button class="btn primary" data-act="qcopy">Copy prompt</button><label class="btn" for="reviewFile" role="button" data-act="qreview"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>Review render</label></div>');
   }
   if (b.fixed) h.push(`<div class="final"><h4>Final prompt — corrected by the critic</h4>${codeBlock(b.pos, 'pos')}${b.neg ? codeBlock(b.neg, 'neg') : ''}</div>`);
   h.push(b.fixed ? `<details class="sec"><summary>Original report</summary><div class="md">${md(out.text)}</div></details>` : `<div class="md">${md(out.text)}</div>`);
@@ -1080,9 +1082,14 @@ thread.addEventListener('click', (e) => {
   const issue = e.target.closest('[data-issue]');
   // Toggle the chip in place: re-rendering the card here would replace the note field and lose what is being typed.
   if (issue) { const d = run.fbDraft ??= { issues: [] }; const i = issue.dataset.issue; d.issues = d.issues.includes(i) ? d.issues.filter((x) => x !== i) : [...d.issues, i]; issue.setAttribute('aria-pressed', d.issues.includes(i)); return; }
-  const act = e.target.closest('[data-act]')?.dataset.act; if (!act || !out) return;
+  const raw = e.target.closest('[data-act]')?.dataset.act, act = { qcopy: 'copyp', qreview: 'review' }[raw] ?? raw; if (!act || !out) return;
   const b = finalBlocks(out);
-  if (act === 'copyp') copyText(b.pos);
+  if (act === 'copyp') {
+    copyText(b.pos);
+    // Once, after the first copy: point at the step that closes the loop.
+    const hints = store.get('ruvet.hints', {});
+    if (isObj(hints) && !hints.review) { store.set('ruvet.hints', { ...hints, review: true }); setTimeout(() => toast('Copied. After you render it, tap Review render to have Claude check the image.', 7000), 1300); }
+  }
   else if (act === 'copyn') copyText(b.neg);
   else if (act === 'copyall') copyText(out.text);
   else if (act === 'save') saveToLibrary(b.pos, b.neg, run, target);
