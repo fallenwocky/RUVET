@@ -66,7 +66,7 @@ label.btn { display: inline-flex; align-items: center; }
 .pipe .st.ok { color: var(--text); } .pipe .st.ok::before { background: var(--pos); }
 .pipe .st.warn { color: var(--text); } .pipe .st.warn::before { background: var(--warn); }
 .pipe .st.err { color: var(--text); } .pipe .st.err::before { background: var(--neg); }
-.pipe .st.run { color: var(--text); border-color: var(--accent); } .pipe .st.run::before { background: var(--accent); animation: blink 1s infinite; }
+.pipe .st.going { color: var(--text); border-color: var(--accent); } .pipe .st.going::before { background: var(--accent); animation: blink 1s infinite; }
 .pipe .sep { width: 10px; height: 1px; background: var(--line); }
 .sum { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .sum .pill { font-size: 12px; padding: 1px 9px; color: var(--text); }
@@ -128,7 +128,7 @@ details.sec > summary { cursor: pointer; font-size: 12.5px; color: var(--dim); p
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); animation: blink 1.2s infinite; }
 .dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; margin-right: 6px; }
 @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .dots i, .pipe .st.run::before { animation: none; } #drawer { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .dots i, .pipe .st.going::before { animation: none; } #drawer { transition: none !important; } }
 
 .empty { max-width: 560px; margin: 4vh auto 0; text-align: center; color: var(--dim); }
 .empty .gem { width: 48px; height: 48px; stroke-width: 1.2; }
@@ -1281,12 +1281,12 @@ async function spark() {
 const thread = $('thread');
 function pipeHTML(run, target, out) {
   const b = finalBlocks(out), st = [];
-  st.push(out.local ? ['Local check · no Claude call', 'ok'] : ['Compile', out.done ? 'ok' : out.x ? 'err' : 'run']);
+  st.push(out.local ? ['Local check · no Claude call', 'ok'] : ['Compile', out.done ? 'ok' : out.x ? 'err' : 'going']);
   if (b.pos) {
     const errs = out.lint?.items.filter((i) => i.lv === 'error').length ?? 0, warns = out.lint?.items.filter((i) => i.lv === 'warn').length ?? 0;
     st.push([errs ? `Lint · ${errs} error${errs > 1 ? 's' : ''}` : warns ? `Lint · ${warns} warning${warns > 1 ? 's' : ''}` : 'Lint · clean', errs ? 'err' : warns ? 'warn' : 'ok']);
     const c = out.critic;
-    if (c?.pending) st.push(['Critic', 'run']);
+    if (c?.pending) st.push(['Critic', 'going']);
     else if (c) st.push([`Critic · ${c.verdict || 'done'}`, c.verdict === 'PASS' ? 'ok' : c.verdict === 'REJECT' ? 'err' : 'warn']);
     else if (run.meta.full && out.stage !== 'done') st.push(['Critic', '']);
     if (c?.pos) st.push(['Fix applied', 'ok']);
@@ -1610,6 +1610,8 @@ async function restoreBackup(file) {
 }
 async function restoreData(d) {
   if (!isObj(d) || d.app !== 'RUVET.' || !Array.isArray(d.chats)) return toast('That file is not a RUVET backup');
+  // Restoring replaces the chat a run is writing into; it has to wait.
+  if (running) return toast('Stop the current run first');
   const chats = d.chats.map(cleanChat).filter(Boolean);
   Object.assign(memory, cleanMemory(d.memory)); saveMemory();
   library = cleanLibrary(d.library); saveLibrary();
@@ -1925,9 +1927,11 @@ $('newBtn').addEventListener('click', () => { if (running) return toast('Stop th
 $('chats').addEventListener('click', async (e) => {
   const del = e.target.closest('[data-del]');
   if (del) {
+    // The open chat is saved again when its run ends, so deleting it mid-run would only bring it back.
+    if (del.dataset.del === chat.id && running) return toast('Stop the current run first');
     if (confirmTap('chat' + del.dataset.del)) {
       await idb('readwrite', (s) => s.delete(del.dataset.del)).catch(() => {});
-      if (del.dataset.del === chat.id && !running) { chat = newChat(); renderThread(); }
+      if (del.dataset.del === chat.id) { chat = newChat(); renderThread(); }
     }
     return renderChats();
   }

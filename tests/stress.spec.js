@@ -326,6 +326,57 @@ test.describe('logic found by reading the code', () => {
   });
 });
 
+test.describe('dangerous actions while a run is going', () => {
+  test('the running step chip is styled as a chip, not as a result', async ({ page }) => {
+    await openWeb(page, { override: () => ({ delay: 1500 }) });
+    await page.fill('#input', 'An idea'); await page.click('#sendBtn');
+    const chip = page.locator('.pipe .st.going');
+    await expect(chip).toBeVisible();
+    expect(await chip.evaluate((el) => getComputedStyle(el).marginBottom)).toBe('0px');
+    await expect(page.locator('.pipe .run')).toHaveCount(0);
+  });
+
+  test('restore and deleting the open chat wait for the run', async ({ page }) => {
+    let slow = false;
+    await openWeb(page, { override: () => (slow ? { delay: 2500 } : undefined) });
+    await send(page, 'First', 1);
+    slow = true;
+    await page.fill('#input', 'Second'); await page.click('#sendBtn');
+    expect(await page.evaluate(() => window.RUVET_TEST.restoreData({ app: 'RUVET.', chats: [] }))).toBeUndefined();
+    await expect(page.locator('#toast')).toContainText('Stop the current run first');
+    await page.evaluate(() => document.querySelector('#chats [data-del]').click());
+    await expect(page.locator('#toast')).toContainText('Stop the current run first');
+    await idle(page, 2);
+    await expect(page.locator('#chats .open')).toHaveCount(1);
+  });
+});
+
+test.describe('how each API failure reads to the user', () => {
+  const cases = [
+    [{ status: 401, message: 'invalid x-api-key' }, 'Invalid API key'],
+    [{ status: 403, message: 'forbidden' }, 'no access to the selected model'],
+    [{ status: 404, message: 'model: x' }, 'Model not found'],
+    [{ status: 400, message: 'prompt is too long' }, 'API error (400)'],
+    [{ network: true }, 'Could not connect'],
+  ];
+  for (const [failure, text] of cases) test(`web: ${JSON.stringify(failure)}`, async ({ page }) => {
+    test.setTimeout(60_000);
+    await openWeb(page, { override: () => failure });
+    await page.fill('#input', 'An idea'); await page.click('#sendBtn');
+    await expect(page.locator('#toast')).toContainText(text, { timeout: 30_000 });
+    await expect(page.locator('body')).not.toHaveClass(/busy/);
+    await expect(page.locator('#input')).toHaveValue('An idea');
+    await expect(page.locator('.run')).toHaveCount(0);
+  });
+  for (const [code, text] of [['not_granted', 'was not allowed'], ['rate_limited', 'Usage limit reached'], ['session_expired', 'sign in again'], ['prompt_too_large', 'too long'], ['some_new_code', 'Connection problem']]) test(`artifact: ${code}`, async ({ page }) => {
+    await open('artifact', page, { override: () => ({ code }) });
+    await page.fill('#input', 'An idea'); await page.click('#sendBtn');
+    await expect(page.locator('#toast')).toContainText(text);
+    await expect(page.locator('body')).not.toHaveClass(/busy/);
+    await expect(page.locator('#input')).toHaveValue('An idea');
+  });
+});
+
 test.describe('blocked storage and extreme screens', () => {
   test('the app loads and runs with localStorage throwing and no IndexedDB', async ({ page }) => {
     await page.addInitScript(() => {

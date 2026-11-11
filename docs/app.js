@@ -587,12 +587,12 @@ async function spark() {
 const thread = $('thread');
 function pipeHTML(run, target, out) {
   const b = finalBlocks(out), st = [];
-  st.push(out.local ? ['Local check · no Claude call', 'ok'] : ['Compile', out.done ? 'ok' : out.x ? 'err' : 'run']);
+  st.push(out.local ? ['Local check · no Claude call', 'ok'] : ['Compile', out.done ? 'ok' : out.x ? 'err' : 'going']);
   if (b.pos) {
     const errs = out.lint?.items.filter((i) => i.lv === 'error').length ?? 0, warns = out.lint?.items.filter((i) => i.lv === 'warn').length ?? 0;
     st.push([errs ? `Lint · ${errs} error${errs > 1 ? 's' : ''}` : warns ? `Lint · ${warns} warning${warns > 1 ? 's' : ''}` : 'Lint · clean', errs ? 'err' : warns ? 'warn' : 'ok']);
     const c = out.critic;
-    if (c?.pending) st.push(['Critic', 'run']);
+    if (c?.pending) st.push(['Critic', 'going']);
     else if (c) st.push([`Critic · ${c.verdict || 'done'}`, c.verdict === 'PASS' ? 'ok' : c.verdict === 'REJECT' ? 'err' : 'warn']);
     else if (run.meta.full && out.stage !== 'done') st.push(['Critic', '']);
     if (c?.pos) st.push(['Fix applied', 'ok']);
@@ -916,6 +916,8 @@ async function restoreBackup(file) {
 }
 async function restoreData(d) {
   if (!isObj(d) || d.app !== 'RUVET.' || !Array.isArray(d.chats)) return toast('That file is not a RUVET backup');
+  // Restoring replaces the chat a run is writing into; it has to wait.
+  if (running) return toast('Stop the current run first');
   const chats = d.chats.map(cleanChat).filter(Boolean);
   Object.assign(memory, cleanMemory(d.memory)); saveMemory();
   library = cleanLibrary(d.library); saveLibrary();
@@ -1231,9 +1233,11 @@ $('newBtn').addEventListener('click', () => { if (running) return toast('Stop th
 $('chats').addEventListener('click', async (e) => {
   const del = e.target.closest('[data-del]');
   if (del) {
+    // The open chat is saved again when its run ends, so deleting it mid-run would only bring it back.
+    if (del.dataset.del === chat.id && running) return toast('Stop the current run first');
     if (confirmTap('chat' + del.dataset.del)) {
       await idb('readwrite', (s) => s.delete(del.dataset.del)).catch(() => {});
-      if (del.dataset.del === chat.id && !running) { chat = newChat(); renderThread(); }
+      if (del.dataset.del === chat.id) { chat = newChat(); renderThread(); }
     }
     return renderChats();
   }

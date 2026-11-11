@@ -112,8 +112,8 @@ const compiles = (calls) => calls.filter((c) => c.system.startsWith('# SAPPHIRE 
 const critics = (calls) => calls.filter((c) => c.system.includes('SAPPHIRE CRITIC'));
 
 async function idle(page, runs) {
-  await expect(page.locator('.run')).toHaveCount(runs);
-  await expect(page.locator('body')).not.toHaveClass(/busy/);
+  await expect(page.locator('body')).not.toHaveClass(/busy/, { timeout: 20_000 });
+  await expect(page.locator('#thread > .run')).toHaveCount(runs);
 }
 async function toggleTarget(page, id) {
   await page.click('#optsBtn');
