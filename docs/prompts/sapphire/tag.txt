@@ -12,6 +12,10 @@ SYNTAX
 - Weights (tag:1.1)-(tag:1.3), max 1.4, at most 4, never on anatomy terms; none if platform.weights = off; BREAK only if platform.break = true.
 NEGATIVE LAYER 1 — lowres, worst quality, low quality, bad anatomy, bad hands, extra digits, fewer digits, text, watermark, signature, logo · pony adds score_6, score_5, score_4, source_pony, source_furry, source_cartoon · then <booru_shared> layers 2-4 and RESOLVE.
 RENDER — CFG 4-7 (lower = less plastic) · 25-30 steps · Euler a or DPM++ 2M Karras · 832×1216 / 1216×832 / 896×1152 / 1024×1024 · <booru_shared> local repair, then upscale ×1.5 at denoise 0.3-0.45.
+CONTRAST — what this pack's economy looks like (structure only; never copy the content):
+weak: masterpiece, best quality, absurdres, ultra detailed, 8k, 1girl, beautiful girl, cute, long hair, very long hair, blue eyes, looking at viewer, smile, smiling, full body, cowboy shot, outdoors, sky, clouds, sunset, night, perfect hands
+strong: masterpiece, best quality, absurdres, general, 1girl, solo, flat color, cowboy shot, from side, very long hair, blue eyes, yellow raincoat, light smile, looking afar, standing, hand in pocket, holding paper bag, pier, seagull, evening, sunset, orange theme
+why: the base once and nothing beyond it; one framing, one gaze, one time; no synonym pairs (long hair / very long hair, smile / smiling); no praise tags or anatomy pseudo-terms; both hands have a state; every tag is a booru tag.
 DEMO — structure only; never copy its content; its ledger opens the ledger (R6).
 Concept "a tired girl waiting at a bus stop on a rainy night" · illustrious · general · 832×1216 · risk 4 low
 positive: masterpiece, best quality, absurdres, general, 1girl, solo, retro artstyle, film grain, cowboy shot, from side, short hair, black hair, grey hoodie, wet hair, wet clothes, bags under eyes, expressionless, looking down, standing, holding umbrella, closed umbrella, hand in pocket, bus stop, night, rain, lamppost, blue theme, muted color

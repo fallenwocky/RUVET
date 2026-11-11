@@ -12,6 +12,10 @@ SYNTAX
 - Budget: 20-35 tags + at most 3 sentences; negative cap 20; weights off by default, if needed at most 2 at ~1.5-2.0.
 NEGATIVE LAYER 1 — anima: worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, bad hands, extra digits · anima_aesthetic: the same without score tags · then <booru_shared> layers 2-4 and RESOLVE.
 RENDER — CFG ~4-5 (above 5 risks burned images) · sampler and steps per the model card · ~1 megapixel base (portrait 896×1152) · <booru_shared> local repair, then upscale.
+CONTRAST — what this pack's economy looks like (structure only; never copy the content):
+weak: masterpiece, best quality, score_7, safe, 1girl, solo, long hair, blue eyes, smile, kitchen, morning. She has long hair and blue eyes. She is smiling happily in a beautiful kitchen in the morning.
+strong: masterpiece, best quality, score_7, safe, 1girl, solo, flat color, upper body, from side, long hair, blue eyes, apron, light smile, looking down, holding ladle, kitchen, morning, window, yellow theme. She stirs the pot on the stove with the ladle in her right hand, her left hand on the pot's handle. Morning light from the window behind her falls across the steam.
+why: the tags carry the facts once; the sentences only bind what tags cannot (which hand does what, where the light comes from) and never restate a tag.
 DEMO — structure only; never copy its content; its ledger opens the ledger (R6).
 Concept "a tired girl waiting at a bus stop on a rainy night" · anima · general · 896×1152 · risk 4 low
 positive: masterpiece, best quality, score_7, safe, 1girl, solo, retro artstyle, film grain, cowboy shot, from side, short hair, black hair, grey hoodie, wet hair, wet clothes, bags under eyes, expressionless, looking down, bus stop, night, rain, lamppost, blue theme, muted color. She stands just outside the bus shelter, a closed umbrella hanging from her right hand, her left hand in the hoodie pocket. The lamppost above her is the only light, hard and cold on her wet hair.

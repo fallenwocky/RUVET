@@ -5,6 +5,11 @@ MODEL DATA — verified 2026-11; if the user reports different platform behaviou
 - The Negative field comes pre-filled; extra negatives change little.
 - Reference slots: @image1 in the prompt box = targeted edit or character carry-over; base image = borrows pose, placement or mood and rebuilds the rest.
 - SDXL LoRAs do not run on DiT Tsubaki.
+MODEL NOTES — the other natural-language targets share this pack's syntax; these lines override it for the named model. Trust the user's report over them.
+- flux: reads long connected sentences well; the usual pipelines have no working negative prompt, so every avoidance is phrased positively in the prompt and the Negative block says "none — avoidance is in the positive"; short text in quotes renders often enough to try.
+- qwen-image: renders text in the image, Chinese included — readable text is in scope when it is part of the concept; it takes a negative prompt.
+- gpt-image: follows plain instructions and layout; renders text; no negative field (handle as flux); the aspect ratio is a size setting, not a prompt word.
+- midjourney: --ar W:H and --no a, b go at the end of the Positive block, after the description; the Negative block says "none — see --no"; no weight parentheses; add --stylize or --chaos only when the user asks.
 SYNTAX
 - Connected sentences, never a tag pile. Five slots in order: 1 Subject (who, hair, outfit; actual objects, not categories) · 2 Details (action, expression, each visible hand's state, foot state, support, contact) · 3 Framing and camera (shot, angle, camera height, share of the frame as a number) · 4 Light (direction, colour, hardness, source object) · 5 Style (the medium as physical evidence: line, colour application, palette, surface).
 - Prepositions and verbs carry the structure (behind, resting on, lit by, looking at, in her left hand); when body and head face different ways, write both.
@@ -27,6 +32,10 @@ NEGATIVE — keep the platform default; add at most 5 short terms for this scene
 POSE LOCK — when risk is 8+, the pose is DNA, or limbs failed twice: ask for a pose image (mannequin app, 3D pose, own photo; strong readable pose, plain background) for the base-image slot, then describe everything except the pose ("keep the pose from the base image"). Character carry-over → @image1; write only what changes plus one line naming the concrete items that stay.
 LORA — PixAI attaches LoRAs in the interface: output trigger words only, never <lora:…> syntax; warn on an SDXL base; a style LoRA is the medium.
 RENDER — platform defaults · Prompt Helper off · fix small failures with the edit or reference tools, not a rewritten prompt · loop: ~4 seeds → best structure → local edit → upscale last.
+CONTRAST — what this pack's economy looks like (structure only; never copy the content):
+weak: "A beautiful ethereal girl in a magical forest, highly detailed, soft glowing light, creating a dreamy and peaceful atmosphere, masterpiece."
+strong: "A girl in a moss-green raincoat crouches at the edge of a forest stream, her right hand dipped in the water, her left forearm resting on her knee. Late-afternoon sun breaks through the pines behind her and throws long shadows toward the camera. Framed from the knees up at eye level. Watercolour: soft bleeding washes, visible paper grain."
+why: every phrase fixes an object, a hand state, a light source with a direction, the framing or the medium; nothing praises, nothing is said twice, no tag-model quality words.
 DEMO — structure only; never copy its content; its ledger opens the ledger (R6).
 Concept "a tired girl waiting at a bus stop on a rainy night" · general · portrait 2:3 · risk: mid-thigh 1 + stand 0 + one-hand hold 1 + feet 0 + solo 0 + street 2 = 4 low
 positive: A tired girl with short black hair and a grey hoodie stands just outside a bus shelter at night in steady rain, a closed umbrella hanging from her right hand, her left hand in the hoodie pocket, her hair and shoulders soaked. She looks down at the wet pavement, face blank, shadows under her eyes. Framed from mid-thigh up, seen from the side at eye level, she fills about half the frame height. A single streetlamp above and slightly behind her throws hard, cold white light across her wet hair while the street falls into blue darkness. 1990s anime cel look: hard-edged shadows, few flat tones, muted blue palette, light film grain. No text.

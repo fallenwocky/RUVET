@@ -28,6 +28,9 @@ Most AI-written prompts are long because length looks like effort. RUVET.'s prom
 - **Backup.** One file holds chats, library, kit and memory (never the API key) and restores them on any device.
 - **Creative direction.** Force a lens (before, after, detail, environment, metaphor…) or a tension type, set boldness from safe to bold, or use *Spark* to get five concept seeds from a theme.
 - **Modes:** auto · generate · variants · audit · repair · image · discuss, plus compact output.
+- **Model-specific writing.** Each target follows its own pack, and the natural-language targets carry their own notes on top: Flux and GPT-image have no working negative field, so avoidance goes into the positive; Midjourney gets `--ar` and `--no` at the end of the prompt; Qwen-Image may render text. Each pack also shows the compiler one weak → strong example of its own economy.
+- **Check locally, for free.** In audit mode, *check locally* lints a pasted prompt against every selected model without calling Claude.
+- **Test bench.** The *Test* view runs a fixed set of ideas through the pipeline on the models you pick and tabulates average length, dialect and bloat findings (before and after the critic), critic verdicts, risk and tokens, tagged with a hash of the prompt version. Run it before and after a prompt change to see whether the change helped; *Copy results as JSON* exports a run.
 - **Library.** Keep prompts, search and filter them, remix one into variants, export or import as JSON.
 - Image input (pick a file, or paste one on desktop). Everything is stored on the device.
 
@@ -57,7 +60,7 @@ It is assembled from the web app's own files: `python3 artifact/build.py` takes 
 - `docs/prompts/sapphire/` — the prompt system in parts: `core.txt` (shared rules), one file per model pack (`description`, `tag`, `hybrid`, plus `booru_shared` for the two tag-based packs) and `critic.txt`. The app assembles a build per request from the core and the packs the target needs (`BUILDS` in `app.js`), so a rule lives in one place and only the selected parts are sent to Claude. To add a model family, add a pack file and a `BUILDS` entry; a second prompt system would get its own folder. If you change a part, bump the `CACHE` version in `docs/sw.js`.
 - `docs/vendor/anthropic.js` — browser bundle of the official `@anthropic-ai/sdk`; update with `npm install && npm run build:vendor`.
 
-A full pipeline run costs two Claude calls per target model (compile and critic). Turn off *critic + auto-fix* in the options to make it one.
+A full pipeline run costs two Claude calls per target model (compile and critic). Turn off *critic + auto-fix* in the options to make it one. The web app shows the tokens each result used; the artifact version cannot see them.
 
 ## License
 
