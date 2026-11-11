@@ -45,9 +45,11 @@
       if (signal) opts.signal = signal;
       const last = turns[turns.length - 1];
       if (last?.image) opts.images = toBlob(last.image);
-      const res = await sample([{ role: 'user', content: rules }, ...rest], opts);
+      let res;
+      try { res = await sample([{ role: 'user', content: rules }, ...rest], opts); }
+      catch (e) { if (e?.code === 'prompt_too_large' && rest.length === 1) e.single = true; throw e; }
       return { text: res.text, truncated: res.truncated };
     },
-    describeError: (e) => (e?.code === 'cancelled' ? null : ERRORS[e?.code] ?? (e?.code ? ERRORS.upstream_error : e?.message || ERRORS.upstream_error)),
+    describeError: (e) => (e?.code === 'cancelled' ? null : e?.code === 'prompt_too_large' && e.single ? 'That message is too long for this view; shorten it.' : ERRORS[e?.code] ?? (e?.code ? ERRORS.upstream_error : e?.message || ERRORS.upstream_error)),
   });
 })();

@@ -25,6 +25,9 @@
 - Marking a result several times left contradictory entries in memory; repairing one model dropped queued feedback for the others; when the first model failed the result opened on its empty tab; a review that could not be read deleted the earlier one.
 - A result saved while still streaming came back looking finished; restoring a backup or deleting the open chat during a run corrupted or resurrected it.
 - Storage failures were reported on every keystroke, or never for chats; they are reported once.
+- Keyboard and screen readers: on a phone the closed history drawer could still be tabbed into; *Review render* could not be reached or pressed from the keyboard; five inputs had no accessible name; the results area announced every streamed repaint. Escape now closes the drawer and focus returns to the menu button.
+- A queued repaint could replace a result card just after it finished, dropping focus from a control inside it.
+- The artifact said "the chat is too long" when a single message was too long.
 - Lessons that were not text, settings outside their options, and words like "constructor" in the repeated-word count are handled.
 
 ### Docs
@@ -33,6 +36,7 @@
 ### Tests
 - `tests/images.spec.js`: image attach and render review without `createImageBitmap` or with it failing, a canvas that cannot re-encode, HEIC, and a Claude view without image support.
 - `tests/fuzz.spec.js`: every field of a real backup replaced by markup or a wrong type (551 variations), random markdown checked against a fixed set of allowed elements, 6000 random strings and 15 adversarial ones through the parsers and lint with a time limit, 600 mutated PNGs, and prompt-boundary checks.
+- `tests/platform.spec.js`: the installed web app starting and compiling with its own files unreachable, the service worker's file list against the files on disk, an accessible name on every control of every view, keyboard operation, storage that refuses writes, long-session limits, a failing case in the test bench, and the docs checked against the code (npm scripts, paths, model and mode names, screenshots, version).
 - `tests/stress.spec.js`: hostile markup in every place Claude's text or user text is shown, empty and malformed replies, API errors, refusals and cut-off replies, a double tap, stopping a slow reply, switching views mid-run, stopping the test bench, 40 runs in one chat, a 1500-prompt library, a 200 KB idea with pathological markdown, corrupt and oversized PNGs, a hostile backup with a `__proto__` key, junk library imports, blocked localStorage and IndexedDB, 320×568 / 568×320 / 2560×1440 screens, and CJK / RTL / emoji text.
 
 ## 1.0.0 — 2026-11-11

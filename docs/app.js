@@ -617,7 +617,7 @@ function outHTML(run, target) {
     if (out.fb) pills.push(`<span class="pill ${out.fb === 'worked' ? 'good' : 'bad'}">${esc(out.fb)}</span>`);
     h.push(`<div class="sum">${pills.join('')}</div>`);
     // On a phone the full action row sits below a long report; the two actions used most also sit here, by the prompt.
-    if (done) h.push('<div class="quick"><button class="btn primary" data-act="qcopy">Copy prompt</button><label class="btn" for="reviewFile" role="button" data-act="qreview"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>Review render</label></div>');
+    if (done) h.push('<div class="quick"><button class="btn primary" data-act="qcopy">Copy prompt</button><label class="btn" for="reviewFile" role="button" tabindex="0" data-act="qreview"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>Review render</label></div>');
   }
   if (b.fixed) h.push(`<div class="final"><h4>Final prompt — corrected by the critic</h4>${codeBlock(b.pos, 'pos')}${b.neg ? codeBlock(b.neg, 'neg') : ''}</div>`);
   h.push(b.fixed ? `<details class="sec"><summary>Original report</summary><div class="md">${md(out.text)}</div></details>` : `<div class="md">${md(out.text)}</div>`);
@@ -635,13 +635,13 @@ function outHTML(run, target) {
     h.push(`<div class="actions"><button class="btn primary" data-act="copyp">Copy prompt</button>${b.neg ? '<button class="btn" data-act="copyn">Copy negative</button>' : ''}`
       + `<button class="btn" data-act="save">Save</button>`
       + (out.done && !out.critic ? '<button class="btn" data-act="critic">Run critic</button>' : '')
-      + '<label class="btn" for="reviewFile" role="button" data-act="review">Review render</label>'
+      + '<label class="btn" for="reviewFile" role="button" tabindex="0" data-act="review">Review render</label>'
       + `<button class="btn ${out.fb === 'worked' ? 'on' : ''}" data-act="worked">Worked</button><button class="btn ${out.fb === 'failed' ? 'off' : ''}" data-act="failed">Failed</button></div>`);
     if (run.fbOpen === target) {
       const d = run.fbDraft ?? { issues: [] };
       h.push(`<div class="fb"><p>What went wrong in the render? RUVET remembers this for ${esc(targetInfo(target).label)}.</p>
         <div class="chips wrap">${ISSUES.map((i) => `<button class="chip" data-issue="${i}" aria-pressed="${d.issues.includes(i)}">${i}</button>`).join('')}</div>
-        <div class="rowx"><input id="fbNote" placeholder="Anything else? (optional)" value="${esc(d.note ?? '')}"></div>
+        <div class="rowx"><input id="fbNote" aria-label="Note about the render" placeholder="Anything else? (optional)" value="${esc(d.note ?? '')}"></div>
         <div class="rowx"><button class="btn primary" data-act="fbrepair">Save and repair</button><button class="btn" data-act="fbsave">Save only</button><button class="btn" data-act="fbcancel">Cancel</button></div></div>`);
     }
   } else if (done && out.text) h.push('<div class="actions"><button class="btn" data-act="copyall">Copy</button></div>');
@@ -657,6 +657,7 @@ function runHTML(run, i) {
     + `<div class="card${out?.x ? ' x' : ''}">${outHTML(run, tab)}</div></div>`;
 }
 function renderThread() {
+  dirty.clear(); // a full render supersedes any queued repaint, which would otherwise replace a card the user has just focused
   if (!chat.runs.length) {
     const need = backend.needs(cfg);
     thread.innerHTML = `<div class="empty">${GEM}<h2>One idea in, a render-ready prompt out</h2>
@@ -684,7 +685,7 @@ function paint(run) {
     if (stick) thread.scrollTop = thread.scrollHeight;
   });
 }
-function setBusy(b) { document.body.classList.toggle('busy', b); $('sendBtn').setAttribute('aria-label', b ? 'Stop' : 'Send'); }
+function setBusy(b) { document.body.classList.toggle('busy', b); $('sendBtn').setAttribute('aria-label', b ? 'Stop' : 'Send'); thread.setAttribute('aria-busy', b); }
 
 // ---------- local check: lint a pasted prompt, no Claude call ----------
 function splitPasted(text) {
@@ -797,7 +798,7 @@ function renderTest() {
   const ideas = benchIdeas(), targets = benchTargets(), calls = ideas.length * targets.length * (bench.critic ? 2 : 1), live = bench.live;
   $('test').innerHTML = `<h2>Test bench</h2><p class="lead">Runs the same ideas through the pipeline and measures the prompts: length, dialect and bloat findings, critic verdicts, risk and tokens. Run it before and after a prompt change to see whether the change helped. Results stay on this device; nothing is saved to your chats or memory.</p>
     <div class="panel"><h3>Set-up</h3>
-      <div class="field">Ideas — one per line, up to 20<textarea id="benchIdeas" rows="6">${esc(bench.ideas)}</textarea></div>
+      <label class="field">Ideas — one per line, up to 20<textarea id="benchIdeas" rows="6">${esc(bench.ideas)}</textarea></label>
       <div class="lbl" style="margin-top:10px">Models</div><div class="chips wrap" id="benchTargets">${TARGETS.map((t) => `<button class="chip" data-bt="${t.id}" aria-pressed="${targets.includes(t.id)}">${esc(t.label)}</button>`).join('')}</div>
       <div class="chips wrap" style="margin-top:8px"><button class="chip alt" data-bo="critic" aria-pressed="${bench.critic}">critic + auto-fix</button><button class="chip alt" data-bo="memory" aria-pressed="${bench.memory}">include my memory</button></div>
       <div class="rowx"><button class="btn primary" data-b="run" ${running ? 'disabled' : ''}>${armed.has('bench') ? `Run ${calls} Claude calls? Tap again` : `Run test — ${calls} Claude calls`}</button>${running && live ? '<button class="btn danger" data-b="stop">Stop</button>' : ''}<button class="btn" data-b="reset">Restore the default ideas</button></div>
@@ -836,7 +837,7 @@ function renderLibrary() {
   const items = library.filter((x) => (!libTarget || x.target === libTarget) && (!q || (x.title + ' ' + x.positive).toLowerCase().includes(q)));
   const used = [...new Set(library.map((x) => x.target))];
   $('library').innerHTML = `<h2>Library</h2><p class="lead">Prompts you kept. RUVET can also learn your house style from them (Memory tab).</p>
-    <div class="toolbar"><input id="libQ" placeholder="Search saved prompts" value="${esc(libQuery)}">
+    <div class="toolbar"><input id="libQ" aria-label="Search saved prompts" placeholder="Search saved prompts" value="${esc(libQuery)}">
       <select id="libT" aria-label="Model"><option value="">All models</option>${used.map((t) => `<option value="${t}"${t === libTarget ? ' selected' : ''}>${esc(targetInfo(t).label)}</option>`).join('')}</select>
       <button class="btn" data-l="export">Copy all as JSON</button><button class="btn" data-l="import">Import</button></div>
     <div id="libImport" hidden class="panel"><div class="field">Paste a JSON export<textarea id="libJson" rows="4"></textarea></div><div class="rowx"><button class="btn primary" data-l="doimport">Add to library</button></div></div>
@@ -862,7 +863,7 @@ function renderMemory() {
       return `<div class="panel" data-target="${t.id}"><h3>${esc(t.label)} <span class="pill">${fb.filter((f) => f.verdict === 'worked').length} worked</span><span class="pill">${fb.filter((f) => f.verdict === 'failed').length} failed</span></h3>
         <p class="hint">Lessons are standing rules for this model. Recent results are sent as they are; "Learn" condenses them into lessons.</p>
         <ul class="lessons">${ls.map((l, i) => `<li><span>${esc(l)}</span><button class="x" data-m="dellesson" data-i="${i}" aria-label="Remove lesson">×</button></li>`).join('') || '<li><span class="none" style="padding:4px 0;text-align:left">No lessons yet.</span></li>'}</ul>
-        <div class="rowx"><input data-newlesson placeholder="Add a rule yourself, e.g. keep both hands parked in full-body shots" style="flex:1 1 220px;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:16px"><button class="btn" data-m="addlesson">Add</button>
+        <div class="rowx"><input data-newlesson aria-label="New lesson" placeholder="Add a rule yourself, e.g. keep both hands parked in full-body shots" style="flex:1 1 220px;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:16px"><button class="btn" data-m="addlesson">Add</button>
           <button class="btn ${n ? 'primary' : ''}" data-m="learn" ${fb.length ? '' : 'disabled'}>Learn from results${n ? ` (${n} new)` : ''}</button></div>
         <details class="sec"><summary>Recent results (${fb.length})</summary><ul class="lessons">${fb.slice(-12).reverse().map((f) => `<li><span>${esc(f.verdict)}${f.issues?.length ? ` — ${esc(f.issues.join(', '))}` : ''}${f.note ? ` — ${esc(f.note)}` : ''}<small>${esc(f.concept || '')}</small></span><button class="x" data-m="delfb" data-id="${esc(f.id)}" aria-label="Remove result">×</button></li>`).join('')}</ul></details></div>`;
     }).join('') || '<div class="panel"><h3>Model lessons</h3><p class="hint" style="margin:0">Nothing yet. After you render a prompt, mark the result Worked or Failed in the Studio — RUVET keeps what it learns per model.</p></div>'}
@@ -1007,8 +1008,17 @@ async function openChat(id) {
   if (c) { chat = c; setView('studio'); renderThread(); } else toast('That chat could not be read');
   return !!c;
 }
-async function openDrawer() { await renderChats(); $('drawer').classList.add('open'); $('scrim').hidden = false; }
-function closeDrawer() { armed.clear(); $('drawer').classList.remove('open'); $('scrim').hidden = true; }
+// On a phone the closed drawer is only moved off screen; `inert` keeps the keyboard and screen readers out of it.
+const wide = matchMedia('(min-width: 900px)');
+const syncDrawer = () => { $('drawer').inert = !wide.matches && !$('drawer').classList.contains('open'); };
+async function openDrawer() { await renderChats(); $('drawer').classList.add('open'); $('scrim').hidden = false; syncDrawer(); $('drawer').querySelector('button')?.focus(); }
+function closeDrawer() { const was = $('drawer').classList.contains('open'); armed.clear(); $('drawer').classList.remove('open'); $('scrim').hidden = true; syncDrawer(); if (was && !wide.matches) $('menuBtn').focus(); }
+wide.addEventListener('change', syncDrawer); syncDrawer();
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('drawer').classList.contains('open') && !wide.matches) closeDrawer();
+  // Labels that act as buttons (they open a file picker) answer to Enter and Space like buttons do.
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('label[role="button"]')) { e.preventDefault(); e.target.click(); }
+});
 function openSettings() {
   $('setFields').innerHTML = (backend.about ? `<p class="about">${esc(backend.about)}</p>` : '') + backend.fields.map((f) => `<label class="field">${esc(f.label)}${f.type === 'select'
     ? `<select id="f-${f.id}">${f.options.map(([v, l]) => `<option value="${v}"${cfg[f.id] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`
@@ -1115,7 +1125,6 @@ function watchPicker(input) {
   }, 1800);
 }
 $('imgBtn').addEventListener('click', () => watchPicker($('file')));
-$('imgBtn').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } });
 $('file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) attachFile(f); });
 $('reviewFile').addEventListener('change', async (e) => {
   const f = e.target.files[0]; e.target.value = ''; if (!f || !reviewFor) return;
