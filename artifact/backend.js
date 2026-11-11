@@ -29,8 +29,9 @@
       if (!downloads) throw new Error('downloads unavailable');
       await downloads.save({ filename: name, data: text });
     },
+    costNote: 'Calls draw on your own Claude usage; token counts are not available in this version.',
     needs: () => (off ? 'Claude cannot be reached in this view. Open the page while signed in to claude.ai' : null),
-    loadPrompt: async (name) => document.getElementById('p-' + name).textContent.trim(),
+    loadPart: async (name) => document.getElementById('p-' + name).textContent.trim(),
     async ask({ cfg, system, turns, onText, signal, quick }) {
       const sample = await samplePromise;
       if (!sample) { off = true; throw { code: 'capability_disabled' }; }

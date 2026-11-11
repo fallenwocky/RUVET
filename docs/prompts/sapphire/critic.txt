@@ -19,6 +19,7 @@ Check in this order; report at most 8 findings, most severe first.
 7 VALIDITY — non-canonical structural tags (high angle → from above, low angle → from below, eyes closed → closed eyes, close-up on hands → hand focus); anatomy pseudo-terms (perfect hands, five fingers, anatomically correct).
 8 REPORT HONESTY — a risk score that does not match the risk table; claimed fixes or pose lock not reflected in the prompt; a frame shape that does not fit the subject.
 9 SAFETY — any minor-protection or real-person violation is automatically CRITICAL.
+10 ECONOMY — a term repeated or restated in other words; more than one value for a single structural field (framing, angle, gaze, time, key light, palette, medium); mood or praise adjectives with nothing visible carrying them; narration in a description prompt ("the image shows", "creating a sense of"); tags padded toward the budget. Report as MEDIUM, or HIGH when the padding buries a defining element; the fix is deletion, never rewording.
 </checks>
 
 <output>

@@ -15,14 +15,15 @@ window.RUVET_START({
     { id: 'build', label: 'Prompt build', type: 'select', def: 'auto', options: [['auto', 'Match the target model (fewer tokens)'], ['universal', 'UNIVERSAL (all packs)']] },
   ],
   init: () => ({ images: true }),
+  costNote: 'Calls are billed to your Anthropic API key at the selected model\'s rates; the token totals below are what the API reported.',
   async saveFile(name, text) {
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: name });
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   },
   needs: (cfg) => (cfg.apiKey ? null : 'Enter your Anthropic API key in Settings to start'),
-  async loadPrompt(name) {
+  async loadPart(name) {
     if (!prompts.has(name)) {
-      const r = await fetch(`prompts/SAPPHIRE_v15_${name}.txt`);
+      const r = await fetch(`prompts/sapphire/${name}.txt`);
       if (!r.ok) throw new Error(`Could not load the prompt file: ${name}`);
       prompts.set(name, await r.text());
     }
@@ -58,6 +59,7 @@ window.RUVET_START({
         raw: msg.content,
         truncated: msg.stop_reason === 'max_tokens',
         refused: msg.stop_reason === 'refusal',
+        usage: msg.usage ? { in: (msg.usage.input_tokens ?? 0) + (msg.usage.cache_read_input_tokens ?? 0) + (msg.usage.cache_creation_input_tokens ?? 0), out: msg.usage.output_tokens ?? 0 } : null,
       };
     } finally { signal?.removeEventListener('abort', abort); }
   },

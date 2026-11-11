@@ -1,9 +1,9 @@
 // App-shell cache: the app opens offline; API calls always go to the network.
-const CACHE = 'ruvet-v3';
+const CACHE = 'ruvet-v6';
 const SHELL = [
   './', 'index.html', 'styles.css', 'app.js', 'backend-api.js', 'vendor/anthropic.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
-  ...['TSUBAKI', 'TAG', 'ANIMA', 'UNIVERSAL', 'CRITIC'].map((n) => `prompts/SAPPHIRE_v15_${n}.txt`),
+  ...['core', 'description', 'booru_shared', 'tag', 'hybrid', 'critic'].map((n) => `prompts/sapphire/${n}.txt`),
 ];
 
 self.addEventListener('install', (e) => {
