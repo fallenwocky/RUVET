@@ -37,7 +37,8 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--dim); flex: none; }
 .icon:active { background: var(--panel2); color: var(--text); }
 .seg { order: 5; flex: 1 1 100%; display: flex; gap: 4px; background: var(--panel2); border-radius: 12px; padding: 3px; margin: 2px 8px 0; }
-.seg button { flex: 1; border-radius: 9px; padding: 6px 10px; font-size: 13px; color: var(--dim); min-height: 34px; }
+.seg { min-width: 0; }
+.seg button { flex: 1 1 0; min-width: 0; border-radius: 9px; padding: 6px 4px; font-size: 13px; color: var(--dim); min-height: 34px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg button[aria-pressed="true"] { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px #0002; }
 .seg .n { font-size: 11px; color: var(--dim); margin-left: 4px; font-weight: 400; }
 
@@ -229,6 +230,16 @@ dialog small { font-size: 11.5px; }
   .user .bubble { max-width: 75%; }
   #toast { left: calc(50% + 140px); }
   #opts { max-height: none; }
+}
+/* Short screens (a phone held sideways): view tabs join the header row, and the composer scrolls under a pinned input row. */
+@media (max-height: 520px) {
+  .bar { flex-wrap: nowrap; padding-block: 2px; }
+  .bar h1 { flex: none; margin-right: 6px; }
+  .seg { order: 0; flex: 1 1 auto; margin: 0 4px; }
+  .seg button { min-height: 30px; padding: 4px 6px; }
+  #composer { max-height: 66vh; overflow-y: auto; padding-bottom: 0; }
+  #opts { max-height: 30vh; }
+  .inputrow { position: sticky; bottom: 0; background: var(--panel); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
 }
 </style>
 <div id="app">
@@ -725,18 +736,81 @@ const HELPERS_RAW = {
 
 const HELPERS = { ...HELPERS_RAW, review: HELPERS_RAW.review.replace('ISSUELIST', ISSUES.join(', ')) };
 
+// ---------- validation: anything read from storage, a backup or an import is checked before use ----------
+const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+const str = (x, max = 4000) => (typeof x === 'string' ? x.slice(0, max) : '');
+const arr = (x) => (Array.isArray(x) ? x : []);
+const strs = (x, max, n) => arr(x).filter((v) => typeof v === 'string').map((v) => v.slice(0, max)).slice(-n);
+const TARGET_IDS = new Set(TARGETS.map((t) => t.id));
+const PREF_DEFAULTS = { mode: 'auto', targets: ['tsubaki3'], rating: 'general', aspect: '', variants: '3', compact: false, lens: '', tension: '', bold: 'balanced', full: true, optsOpen: false, chars: [], loras: [] };
+const pick = (v, allowed, d) => (allowed.includes(v) ? v : d);
+function cleanPrefs(p) {
+  const o = { ...PREF_DEFAULTS, targets: [...PREF_DEFAULTS.targets], chars: [], loras: [] };
+  if (!isObj(p)) return o;
+  o.mode = pick(p.mode, MODES.map((m) => m.id), o.mode);
+  const t = [...new Set(arr(p.targets).filter((x) => TARGET_IDS.has(x)))].slice(0, 4); if (t.length) o.targets = t;
+  o.rating = pick(p.rating, ['general', 'sensitive', 'nsfw', 'explicit'], o.rating);
+  o.aspect = pick(p.aspect, ['', 'portrait', 'landscape', 'square'], o.aspect);
+  o.variants = pick(String(p.variants), ['2', '3', '4', '5', '6'], o.variants);
+  o.lens = pick(p.lens, ['', ...LENSES], ''); o.tension = pick(p.tension, ['', ...TENSIONS], ''); o.bold = pick(p.bold, ['safe', 'balanced', 'bold'], o.bold);
+  for (const k of ['compact', 'full', 'optsOpen']) if (typeof p[k] === 'boolean') o[k] = p[k];
+  o.chars = strs(p.chars, 100, 50); o.loras = strs(p.loras, 100, 50);
+  return o;
+}
+function cleanMemory(m) {
+  const o = { house: {}, lessons: {}, feedback: [], ledger: [] };
+  if (!isObj(m)) return o;
+  if (isObj(m.house)) for (const [k] of HOUSE) if (typeof m.house[k] === 'string') o.house[k] = m.house[k].slice(0, 400);
+  if (isObj(m.lessons)) for (const id of TARGET_IDS) { const l = strs(m.lessons[id], 400, 20); if (l.length) o.lessons[id] = l; }
+  o.feedback = arr(m.feedback).filter((f) => isObj(f) && TARGET_IDS.has(f.target) && (f.verdict === 'worked' || f.verdict === 'failed')).slice(-200)
+    .map((f, i) => ({ id: str(f.id, 100) || `fb${i}`, ts: +f.ts || 0, target: f.target, verdict: f.verdict, issues: arr(f.issues).filter((x) => ISSUES.includes(x)), note: str(f.note, 400), concept: str(f.concept, 120), ledger: str(f.ledger, 400), learned: f.learned === true }));
+  o.ledger = strs(m.ledger, 400, 6);
+  return o;
+}
+function cleanLibraryItem(x, i) {
+  if (!isObj(x) || typeof x.positive !== 'string' || !x.positive.trim()) return null;
+  return { id: str(x.id, 100) || `lib${Date.now()}${i}`, ts: +x.ts || Date.now(), title: str(x.title, 70) || x.positive.slice(0, 70), target: TARGET_IDS.has(x.target) ? x.target : 'tsubaki3',
+    rating: pick(x.rating, ['general', 'sensitive', 'nsfw', 'explicit'], 'general'), concept: str(x.concept, 4000), positive: x.positive.slice(0, 20000), negative: str(x.negative, 20000) };
+}
+const cleanLibrary = (x) => arr(x).map(cleanLibraryItem).filter(Boolean);
+function cleanKit(k) {
+  const o = { chars: [], loras: [] };
+  if (!isObj(k)) return o;
+  o.chars = arr(k.chars).filter((c) => isObj(c) && str(c.name).trim()).slice(0, 100).map((c, i) => ({ id: str(c.id, 100) || `c${i}`, name: str(c.name, 100), series: str(c.series, 200), identity: str(c.identity, 600), outfit: str(c.outfit, 600), notes: str(c.notes, 600) }));
+  o.loras = arr(k.loras).filter((l) => isObj(l) && str(l.name).trim()).slice(0, 100).map((l, i) => ({ id: str(l.id, 100) || `l${i}`, name: str(l.name, 100), trigger: str(l.trigger, 300), weight: str(String(l.weight ?? ''), 10),
+    type: pick(l.type, ['style', 'character', 'concept'], 'style'), base: pick(l.base, ['sdxl', 'dit', 'other'], 'other') }));
+  return o;
+}
+function cleanImage(img) { return isObj(img) && typeof img.data === 'string' && /^image\/(jpeg|png|webp|gif)$/.test(img.media_type) ? { media_type: img.media_type, data: img.data } : null; }
+function cleanChat(c) {
+  if (!isObj(c) || typeof c.id !== 'string' || !Array.isArray(c.runs)) return null;
+  const runs = c.runs.filter((r) => isObj(r) && isObj(r.meta) && isObj(r.outs) && arr(r.meta.targets).some((t) => TARGET_IDS.has(t))).map((r) => {
+    const meta = { ...cleanPrefs(r.meta), cast: arr(r.meta.cast).filter(isObj), loras: arr(r.meta.loras).filter(isObj) };
+    const outs = {}, composed = {};
+    for (const t of meta.targets) {
+      if (isObj(r.outs[t]) && typeof r.outs[t].text === 'string') outs[t] = { ...r.outs[t], stage: 'done' };
+      if (isObj(r.composed) && typeof r.composed[t] === 'string') composed[t] = r.composed[t];
+    }
+    return { id: str(r.id, 100) || String(Math.random()), text: str(r.text, 400000), meta, image: cleanImage(r.image), composed, outs, tab: meta.targets.includes(r.tab) ? r.tab : meta.targets[0] };
+  });
+  const sys = {};
+  if (isObj(c.sys)) for (const [t, v] of Object.entries(c.sys)) if (TARGET_IDS.has(t) && isObj(v) && BUILDS[v.build] && typeof v.mem === 'string') sys[t] = { build: v.build, mem: v.mem };
+  const fb = {};
+  if (isObj(c.fb)) for (const [t, v] of Object.entries(c.fb)) if (TARGET_IDS.has(t)) fb[t] = strs(v, 1000, 20);
+  return { id: c.id.slice(0, 100), title: str(c.title, 200), updated: +c.updated || 0, runs, sys, fb };
+}
+
 // ---------- persistence ----------
 const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast('Could not save (storage may be full)'); } },
 };
-const cfg = store.get('ruvet.settings', {});
+const cfg = {}; { const saved = store.get('ruvet.settings', {}); if (isObj(saved)) for (const [k, v] of Object.entries(saved)) if (typeof v === 'string') cfg[k] = v; }
 for (const f of backend.fields) cfg[f.id] ??= f.def ?? '';
-const prefs = Object.assign({ mode: 'auto', targets: ['tsubaki3'], rating: 'general', aspect: '', variants: '3', compact: false, lens: '', tension: '', bold: 'balanced', full: true, optsOpen: false, chars: [], loras: [] }, store.get('ruvet.prefs', {}));
-prefs.targets = prefs.targets.filter((t) => TARGETS.some((x) => x.id === t)); if (!prefs.targets.length) prefs.targets = ['tsubaki3'];
-const memory = Object.assign({ house: {}, lessons: {}, feedback: [], ledger: [] }, store.get('ruvet.memory', {}));
-let library = store.get('ruvet.library', []);
-const kit = Object.assign({ chars: [], loras: [] }, store.get('ruvet.kit', {}));
+const prefs = cleanPrefs(store.get('ruvet.prefs', {}));
+const memory = cleanMemory(store.get('ruvet.memory', {}));
+let library = cleanLibrary(store.get('ruvet.library', []));
+const kit = cleanKit(store.get('ruvet.kit', {}));
 const saveKit = () => { prefs.chars = prefs.chars.filter((id) => kit.chars.some((c) => c.id === id)); prefs.loras = prefs.loras.filter((id) => kit.loras.some((l) => l.id === id)); store.set('ruvet.kit', kit); };
 const saveMemory = () => store.set('ruvet.memory', memory);
 const saveLibrary = () => store.set('ruvet.library', library);
@@ -767,7 +841,7 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + 
 const newChat = () => ({ id: uid(), title: '', updated: Date.now(), runs: [], sys: {}, fb: {} });
 let chat = newChat();
 let pendingImage = null; // { media_type, data }
-let ctl = null, running = false, caps = { images: false };
+let ctl = null, running = false, startedAt = 0, caps = { images: false };
 const armed = new Set(); // two-tap confirmations
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const targetInfo = (id) => TARGETS.find((t) => t.id === id) ?? TARGETS[0];
@@ -1018,6 +1092,7 @@ async function pipeline(run, target) {
   try {
     const res = await ask({ system: await systemFor(target), turns: historyFor(target, run), onText: (t) => { out.text = t; paint(run); } });
     out.text = res.text; out.raw = res.raw; addUsage(out, res.usage);
+    if (!res.refused && !res.text.trim()) { delete run.outs[target]; toast('The reply came back empty; try again.'); paint(run); return; }
     if (res.refused) { out.stage = 'done'; out.x = true; out.text ||= 'The model declined this request.'; out.note = 'Declined — this result is left out of later requests.'; return; }
     out.done = true;
     if (res.truncated) out.note = 'The reply was cut short; you can type "continue".';
@@ -1053,7 +1128,8 @@ async function critic(run, target, out) {
 
 // `over` runs a request the app composed itself (e.g. a repair from a render review) without touching the composer.
 async function send(over) {
-  if (running) { if (!over) ctl?.abort(); return; }
+  // The send button is also the stop button; a second tap within a moment of starting is a double tap, not a stop.
+  if (running) { if (!over && Date.now() - startedAt > 800) ctl?.abort(); return; }
   const input = $('input'), text = over?.text ?? input.value.trim(), image = over ? over.image : pendingImage;
   if (!text && !image) return;
   const need = backend.needs(cfg);
@@ -1065,7 +1141,7 @@ async function send(over) {
   const fbBefore = chat.fb; chat.fb = {};
   chat.runs.push(run); chat.title ||= (text || 'Image').slice(0, 60);
   if (!over) { input.value = ''; autosize(); setImage(null); $('sparks').hidden = true; }
-  running = true; ctl = new AbortController(); setBusy(true); renderThread();
+  running = true; startedAt = Date.now(); ctl = new AbortController(); setBusy(true); renderThread();
   for (const t of meta.targets) { if (ctl.signal.aborted) break; await pipeline(run, t); }
   running = false; ctl = null; setBusy(false);
   if (!Object.keys(run.outs).length) {
@@ -1280,7 +1356,15 @@ const BENCH_IDEAS = [
   'A fox spirit selling lanterns at a snowy roadside stall',
   'A boy holding a jar of fireflies on a summer porch',
 ];
-const bench = Object.assign({ ideas: BENCH_IDEAS.join('\n'), targets: null, critic: true, memory: false, runs: [] }, store.get('ruvet.bench', {}));
+const bench = (() => {
+  const b = store.get('ruvet.bench', {}), o = { ideas: BENCH_IDEAS.join('\n'), targets: null, critic: true, memory: false, runs: [] };
+  if (!isObj(b)) return o;
+  if (typeof b.ideas === 'string') o.ideas = b.ideas.slice(0, 20000);
+  const t = arr(b.targets).filter((x) => TARGET_IDS.has(x)); if (t.length) o.targets = t;
+  if (typeof b.critic === 'boolean') o.critic = b.critic; if (typeof b.memory === 'boolean') o.memory = b.memory;
+  o.runs = arr(b.runs).filter((r) => isObj(r) && Array.isArray(r.cases) && r.cases.every((c) => isObj(c) && TARGET_IDS.has(c.target))).slice(0, 8).map((r) => ({ ...r, cases: r.cases.map((c) => ({ ...c, findings: strs(c.findings, 400, 50) })), summary: undefined }));
+  return o;
+})();
 const saveBench = () => store.set('ruvet.bench', { ...bench, live: undefined });
 function hash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(16).slice(0, 6); }
 async function promptVersion(target) { return hash((await loadBuild(targetInfo(target).build)) + (await backend.loadPart('critic'))); }
@@ -1461,12 +1545,14 @@ async function makeBackup() {
 async function restoreBackup(file) {
   let d; try { d = JSON.parse(await file.text()); } catch { return toast('That file is not a RUVET backup'); }
   if (d?.app !== 'RUVET.' || !Array.isArray(d.chats)) return toast('That file is not a RUVET backup');
-  Object.assign(memory, { house: {}, lessons: {}, feedback: [], ledger: [] }, d.memory); saveMemory();
-  library = Array.isArray(d.library) ? d.library : []; saveLibrary();
-  Object.assign(kit, { chars: [], loras: [] }, d.kit); Object.assign(prefs, d.prefs); saveKit();
-  await idb('readwrite', (s) => { s.clear(); for (const c of d.chats) s.put(c); }).catch(() => toast('Chats could not be restored'));
+  const chats = d.chats.map(cleanChat).filter(Boolean);
+  Object.assign(memory, cleanMemory(d.memory)); saveMemory();
+  library = cleanLibrary(d.library); saveLibrary();
+  Object.assign(kit, cleanKit(d.kit)); Object.assign(prefs, cleanPrefs(d.prefs)); saveKit();
+  await idb('readwrite', (s) => { s.clear(); for (const c of chats) s.put(c); }).catch(() => toast('Chats could not be restored'));
   chat = newChat(); syncControls(); renderThread(); renderChats(); setView('memory');
-  toast(`Restored ${d.chats.length} chats, ${library.length} prompts`);
+  const skipped = d.chats.length - chats.length;
+  toast(`Restored ${chats.length} chats, ${library.length} prompts${skipped ? ` (${skipped} unreadable chats skipped)` : ''}`);
 }
 
 // ---------- shell ----------
@@ -1673,8 +1759,9 @@ $('library').addEventListener('click', (e) => {
   else if (a === 'import') $('libImport').hidden = !$('libImport').hidden;
   else if (a === 'doimport') {
     try {
-      const list = JSON.parse($('libJson').value).filter((x) => x && typeof x.positive === 'string');
-      const fresh = list.filter((x) => !library.some((y) => y.positive === x.positive)).map((x) => ({ id: uid(), ts: +x.ts || Date.now(), title: String(x.title ?? x.positive).slice(0, 70), target: targetInfo(x.target).id, rating: String(x.rating ?? 'general'), concept: String(x.concept ?? ''), positive: x.positive, negative: String(x.negative ?? '') }));
+      const list = JSON.parse($('libJson').value); if (!Array.isArray(list)) throw new Error('not a list');
+      const fresh = cleanLibrary(list).filter((x) => !library.some((y) => y.positive === x.positive)).map((x) => ({ ...x, id: uid() }));
+      if (!fresh.length) throw new Error('nothing new');
       library = [...fresh, ...library]; saveLibrary(); renderLibrary(); renderNav(); toast(`${fresh.length} prompts added`);
     } catch { toast('That is not a RUVET library export'); }
   } else if (a === 'remix' && item) {
@@ -1717,8 +1804,8 @@ $('chats').addEventListener('click', async (e) => {
   }
   const open = e.target.closest('[data-id]'); if (!open) return;
   if (running) return toast('Stop the current run first');
-  const c = await idb('readonly', (s) => s.get(open.dataset.id)).catch(() => null);
-  if (c) { chat = c; setView('studio'); renderThread(); }
+  const c = cleanChat(await idb('readonly', (s) => s.get(open.dataset.id)).catch(() => null));
+  if (c) { chat = c; setView('studio'); renderThread(); } else toast('That chat could not be read');
   closeDrawer(); renderChats();
 });
 $('setBtn').addEventListener('click', openSettings);

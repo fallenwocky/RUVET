@@ -29,7 +29,7 @@ Node 22 and Python 3 are needed. There is no build step for the web app: `docs/`
 - **After changing anything in `docs/`, run `npm run build:artifact`** and commit `artifact/ruvet.html`. CI fails if it is out of date.
 - **After changing a prompt part, bump `CACHE` in `docs/sw.js`** so installed copies pick it up.
 - **A prompt change needs numbers.** Run the Test view with the same ideas and models before and after, and put both tables in the pull request. Lint findings and critic verdicts are the signal; length alone is not.
-- Add a test for each new behaviour. Tests never call the real Claude API; extend `reply()` in `tests/helpers.js` instead.
+- Add a test for each new behaviour. Anything that reads outside data (Claude's replies, files, storage, imports) also gets a case in `tests/stress.spec.js`; the mocked Claude in `tests/helpers.js` takes an `override` that returns errors, refusals, delays or hostile text. Tests never call the real Claude API; extend `reply()` in `tests/helpers.js` instead.
 - Keep `docs/prompts/sapphire/` in English. The interface text is English too.
 
 ## Adding a model

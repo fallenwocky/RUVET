@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed (found by the stress suite)
+- An empty reply from Claude left the web app showing "Thinking…" forever; the run now ends and the text goes back to the composer.
+- A double tap on Send cancelled the run it had just started (the button doubles as Stop); taps within 0.8 s of starting are ignored.
+- A damaged or hand-edited backup file broke every view; backups, imports and everything read from browser storage are now validated field by field, and unreadable chats are skipped and counted.
+- On a phone held sideways, opening the options pushed the Send button off the screen; short screens now keep the input row pinned.
+
+### Tests
+- `tests/stress.spec.js`: hostile markup in every place Claude's text or user text is shown, empty and malformed replies, API errors, refusals and cut-off replies, a double tap, stopping a slow reply, switching views mid-run, stopping the test bench, 40 runs in one chat, a 1500-prompt library, a 200 KB idea with pathological markdown, corrupt and oversized PNGs, a hostile backup with a `__proto__` key, junk library imports, blocked localStorage and IndexedDB, 320×568 / 568×320 / 2560×1440 screens, and CJK / RTL / emoji text.
+
 ## 1.0.0 — 2026-11-11
 
 First release of RUVET. as its own repository (it started as an app inside DSS-Framework).
