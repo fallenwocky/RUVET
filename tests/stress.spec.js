@@ -250,6 +250,82 @@ for (const kind of ['web', 'artifact']) {
   });
 }
 
+test.describe('logic found by reading the code', () => {
+  test('Enter while a run is going does not cancel it', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Enter sends only with a keyboard and mouse');
+    const app = await openWeb(page, { override: () => ({ delay: 1500 }) });
+    await page.fill('#input', 'first'); await page.keyboard.press('Enter');
+    await page.waitForTimeout(1000);
+    await page.fill('#input', 'typing the next one'); await page.keyboard.press('Enter');
+    await expect(page.locator('#toast')).toContainText('Still working');
+    await idle(page, 1);
+    await expect(page.locator('.code.pos')).toHaveCount(1);
+    await expect(page.locator('#input')).toHaveValue('typing the next one');
+    expect(compiles(app.calls)).toHaveLength(1);
+  });
+
+  test('a result has one verdict in memory however often it is marked', async ({ page }) => {
+    await openWeb(page);
+    await send(page, 'An idea', 1);
+    await page.click('.actions [data-act="worked"]'); await page.click('.actions [data-act="worked"]');
+    await page.click('.actions [data-act="failed"]'); await page.click('[data-issue="extra limbs"]'); await page.click('[data-act="fbsave"]');
+    const fb = await page.evaluate(() => JSON.parse(localStorage.getItem('ruvet.memory')).feedback);
+    expect(fb).toHaveLength(1);
+    expect(fb[0]).toMatchObject({ verdict: 'failed', issues: ['extra limbs'] });
+    const app2 = await page.evaluate(() => window.RUVET_TEST.state().chat.fb);
+    expect(app2.tsubaki3).toHaveLength(1);
+  });
+
+  test('render feedback for another model stays queued when one model is repaired', async ({ page }) => {
+    const app = await openWeb(page);
+    await toggleTarget(page, 'illustrious');
+    await send(page, 'An idea', 1);
+    await page.click('.actions [data-act="worked"]');
+    await page.click('[data-tab="illustrious"]');
+    await page.click('.actions [data-act="failed"]'); await page.click('[data-issue="broken hands"]'); await page.click('[data-act="fbrepair"]');
+    await page.click('#sendBtn'); await idle(page, 2);
+    expect(compiles(app.calls).at(-1).user).toContain('failed on render: broken hands');
+    await page.click('#optsBtn'); await page.click('#targets [data-target="tsubaki3"]'); await page.click('#targets [data-target="illustrious"]'); await page.click('#optsBtn');
+    await page.click('[data-mode="generate"]');
+    await send(page, 'Next for tsubaki', 3);
+    expect(compiles(app.calls).at(-1).user).toContain('feedback: the previous output rendered well');
+  });
+
+  test('when the first model fails, the tab of one that answered is shown', async ({ page }) => {
+    await openWeb(page, { override: (system, user) => (system.startsWith('# SAPPHIRE VISION') && user.includes('model: tsubaki3') ? { status: 400, message: 'no' } : undefined) });
+    await toggleTarget(page, 'illustrious');
+    await send(page, 'An idea', 1);
+    await expect(page.locator('[data-tab="illustrious"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.code.pos').first()).toBeVisible();
+  });
+
+  test('a review that cannot be read keeps the earlier review', async ({ page }) => {
+    let n = 0;
+    await openWeb(page, { override: (system) => (system.startsWith('You review') && ++n === 2 ? 'not json' : undefined) });
+    await send(page, 'An idea', 1);
+    for (let i = 0; i < 2; i++) {
+      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.actions [data-act="review"]')]);
+      await chooser.setFiles({ name: 'r.png', mimeType: 'image/png', buffer: pngWithText('x', 'y') });
+      await expect(page.locator('body')).not.toHaveClass(/busy/);
+      await expect(page.locator('.review')).toContainText('Broke: broken hands');
+    }
+    await expect(page.locator('#toast')).toContainText('Could not read the review');
+  });
+
+  test('learned lessons that are not text are dropped; a stored setting outside its options resets', async ({ page }) => {
+    await page.addInitScript(() => { if (!localStorage.getItem('ruvet.settings')) localStorage.setItem('ruvet.settings', JSON.stringify({ apiKey: 'sk-ant-test', model: 'not-a-model', effort: 7 })); });
+    const app = await openWeb(page, { override: (system) => (system.startsWith('You maintain') ? JSON.stringify(['keep hands parked', { a: 1 }, 5, null, 'two\nlines <b>']) : undefined) });
+    await send(page, 'An idea', 1);
+    expect(app.calls[0].body.model).toBe('claude-opus-5-5');
+    expect(app.calls[0].body.output_config.effort).toBe('medium');
+    await page.click('.actions [data-act="worked"]');
+    await page.click('[data-view="memory"]'); await page.click('#memory [data-m="learn"]');
+    await expect(page.locator('#memory [data-m="dellesson"]')).toHaveCount(2);
+    const lessons = await page.evaluate(() => JSON.parse(localStorage.getItem('ruvet.memory')).lessons.tsubaki3);
+    expect(lessons).toEqual(['keep hands parked', 'two lines b']);
+  });
+});
+
 test.describe('blocked storage and extreme screens', () => {
   test('the app loads and runs with localStorage throwing and no IndexedDB', async ({ page }) => {
     await page.addInitScript(() => {

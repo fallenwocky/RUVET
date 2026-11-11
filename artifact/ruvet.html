@@ -803,7 +803,7 @@ function cleanOut(o) {
   if (out.done && Array.isArray(o.raw)) out.raw = o.raw;
   if (typeof o.note === 'string') out.note = o.note.slice(0, 500);
   else if (!out.local && !out.done) out.note = 'Interrupted — this result is left out of later requests.';
-  if (o.fb === 'worked' || o.fb === 'failed') out.fb = o.fb;
+  if (o.fb === 'worked' || o.fb === 'failed') { out.fb = o.fb; if (safeId(o.fbId)) out.fbId = o.fbId; }
   if (isObj(o.usage) && Number.isFinite(+o.usage.in) && Number.isFinite(+o.usage.out)) out.usage = { in: Math.max(0, +o.usage.in), out: Math.max(0, +o.usage.out) };
   if (isObj(o.critic) && typeof o.critic.text === 'string' && o.critic.text && o.critic.pending !== true) {
     const c = out.critic = { text: o.critic.text.slice(0, 200000), verdict: pick(o.critic.verdict, ['PASS', 'FIX', 'REJECT'], '') };
@@ -841,7 +841,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { warnStorage(); } },
 };
 const cfg = {}; { const saved = store.get('ruvet.settings', {}); if (isObj(saved)) for (const [k, v] of Object.entries(saved)) if (typeof v === 'string') cfg[k] = v; }
-for (const f of backend.fields) cfg[f.id] ??= f.def ?? '';
+for (const f of backend.fields) { cfg[f.id] ??= f.def ?? ''; if (f.type === 'select' && !f.options.some(([v]) => v === cfg[f.id])) cfg[f.id] = f.def; }
 const prefs = cleanPrefs(store.get('ruvet.prefs', {}));
 const memory = cleanMemory(store.get('ruvet.memory', {}));
 let library = cleanLibrary(store.get('ruvet.library', []));
@@ -986,7 +986,7 @@ function lint(target, pos, neg, meta) {
     const empty = found(['ethereal', 'mesmerizing', 'captivating', 'breathtaking', 'whimsical', 'dreamlike', 'majestic', 'vibrant', 'exquisite', 'gorgeous', 'beautiful', 'masterfully', 'incredibly', 'extremely', 'very', 'perfect']);
     if (empty.length) add('warn', `Words with nothing to draw: ${empty.join(', ')}`, 'bloat');
     const STOP = new Set(['about', 'above', 'across', 'against', 'along', 'around', 'behind', 'below', 'beside', 'between', 'while', 'where', 'which', 'their', 'there', 'these', 'those', 'three', 'through', 'toward', 'towards', 'under', 'light', 'frame', 'slightly', 'almost', 'with', 'from', 'that', 'this', 'into', 'over', 'only', 'left', 'right', 'hand', 'hands']);
-    const freq = {};
+    const freq = Object.create(null);
     for (const w of low.match(/[a-z]{4,}/g) ?? []) if (!STOP.has(w)) freq[w] = (freq[w] ?? 0) + 1;
     const rep = Object.entries(freq).filter(([, n]) => n >= 4).map(([w, n]) => `${w} ×${n}`);
     if (rep.length) add('warn', `Repeated words: ${rep.join(', ')}`, 'bloat');
@@ -999,7 +999,8 @@ function lint(target, pos, neg, meta) {
     let tagPart = pos, sentences = 0;
     if (pack === 'HYBRID') {
       const cut = pos.search(/\.\s+[A-Z]/);
-      if (cut > 0) { const start = pos.lastIndexOf(',', cut); sentences = (pos.slice(start + 1).match(/[.!?](\s|$)/g) || []).length; tagPart = pos.slice(0, start); }
+      // Tags run up to the first full stop that is followed by a capital; everything after it is the sentences.
+      if (cut > 0) { tagPart = pos.slice(0, cut); sentences = (pos.slice(cut + 1).match(/[.!?](\s|$)/g) || []).length; }
     }
     const tags = tagPart.split(',').map((t) => t.trim()).filter(Boolean);
     count = `${tags.length} tags` + (sentences ? ` + ${sentences} sentences` : '');
@@ -1180,10 +1181,11 @@ async function send(over) {
   const need = backend.needs(cfg);
   if (need) { openSettings(); toast(need); return; }
   const meta = { ...prefs, targets: [...prefs.targets], ...over?.meta };
-  meta.cast = kit.chars.filter((c) => prefs.chars.includes(c.id)); meta.loras = kit.loras.filter((l) => prefs.loras.includes(l.id));
+  meta.cast = over?.meta?.cast ?? kit.chars.filter((c) => prefs.chars.includes(c.id)); meta.loras = over?.meta?.loras ?? kit.loras.filter((l) => prefs.loras.includes(l.id));
   const run = { id: uid(), text, meta, image, composed: {}, outs: {}, tab: meta.targets[0] };
   for (const t of meta.targets) run.composed[t] = compose(text, meta, t, !!image, notesFor(t));
-  const fbBefore = chat.fb; chat.fb = {};
+  // Queued render feedback is consumed only for the targets this run addresses.
+  const fbBefore = { ...chat.fb }; chat.fb = { ...chat.fb }; for (const t of meta.targets) delete chat.fb[t];
   chat.runs.push(run); chat.title ||= (text || 'Image').slice(0, 60);
   if (!over) { input.value = ''; autosize(); setImage(null); $('sparks').hidden = true; }
   running = true; startedAt = Date.now(); ctl = new AbortController(); setBusy(true); renderThread();
@@ -1193,6 +1195,7 @@ async function send(over) {
     // Nothing usable came back: roll the run back and return the text to the composer.
     chat.runs.pop(); chat.fb = fbBefore; if (!over) { input.value = text; autosize(); setImage(image); }
   }
+  else if (!run.outs[run.tab]) run.tab = Object.keys(run.outs)[0]; // the first model failed: show one that answered
   renderThread(); saveChat();
 }
 async function runCritic(run, target) {
@@ -1207,11 +1210,13 @@ async function runCritic(run, target) {
 // ---------- learning ----------
 function recordFeedback(run, target, verdict, issues, note) {
   const out = run.outs[target];
-  out.fb = verdict;
-  memory.feedback.push({ id: uid(), ts: Date.now(), target, verdict, issues, note, concept: run.text.slice(0, 120), ledger: lastLedger(out.text) });
+  // A result has one verdict: marking it again (or reviewing it after marking) replaces the earlier entry.
+  if (out.fbId) memory.feedback = memory.feedback.filter((f) => f.id !== out.fbId);
+  out.fb = verdict; out.fbId = uid();
+  memory.feedback.push({ id: out.fbId, ts: Date.now(), target, verdict, issues, note, concept: run.text.slice(0, 120), ledger: lastLedger(out.text) });
   memory.feedback = memory.feedback.slice(-200); saveMemory();
   if (run === chat.runs.at(-1)) {
-    chat.fb ??= {}; (chat.fb[target] ??= []).push(verdict === 'worked' ? 'the previous output rendered well; keep what made it work'
+    chat.fb ??= {}; chat.fb[target] = []; chat.fb[target].push(verdict === 'worked' ? 'the previous output rendered well; keep what made it work'
       : `the previous output failed on render${issues.length ? `: ${issues.join(', ')}` : ''}${note ? ` — ${oneLine(note, 400)}` : ''}`);
   }
   saveChat(); renderNav();
@@ -1224,7 +1229,7 @@ async function learnLessons(target) {
   if (!res) return;
   const list = parseJSON(res);
   if (!Array.isArray(list)) throw new Error('not a list');
-  memory.lessons[target] = list.map(String).filter(Boolean).slice(0, 8);
+  memory.lessons[target] = list.filter((x) => typeof x === 'string').map((x) => oneLine(x)).filter(Boolean).slice(0, 8);
   for (const f of memory.feedback) if (f.target === target) f.learned = true;
   saveMemory(); toast(`${memory.lessons[target].length} lessons for ${targetInfo(target).label}`);
 }
@@ -1233,7 +1238,8 @@ async function learnStyle() {
   const res = await helper(HELPERS.style, library.slice(0, 30).map((x, i) => `${i + 1}. ${x.positive}`).join('\n\n'));
   if (!res) return;
   const s = parseJSON(res);
-  for (const [k] of HOUSE) if (typeof s[k] === 'string' && s[k].trim()) memory.house[k] = s[k].trim();
+  if (!isObj(s)) throw new Error('not an object');
+  for (const [k] of HOUSE) if (typeof s[k] === 'string' && s[k].trim()) memory.house[k] = oneLine(s[k]);
   saveMemory(); toast('House style updated from your library');
 }
 async function helper(system, text, opts = {}) {
@@ -1248,13 +1254,15 @@ async function helper(system, text, opts = {}) {
 // Render review: Claude looks at the rendered image next to the prompt, and the verdict goes into memory by itself.
 async function reviewRender(run, target, image) {
   const out = run.outs[target], b = finalBlocks(out);
+  if (!chat.runs.includes(run)) return toast('That result is no longer open');
+  const earlier = out.review;
   out.review = { pending: true, image }; paint(run);
   const res = await helper(HELPERS.review, `Target model: ${target}\n\nPositive prompt:\n${b.pos}\n\nNegative prompt:\n${b.neg || '(none)'}\n\nThe attached image is the render.`, { image, quick: false });
   let r = null;
   try { r = res && parseJSON(res); } catch { /* handled below */ }
-  if (!r || typeof r !== 'object') { delete out.review; paint(run); if (res) toast('Could not read the review; try again'); return; }
+  if (!isObj(r)) { if (earlier && !earlier.pending) out.review = earlier; else delete out.review; paint(run); if (res) toast('Could not read the review; try again'); return; }
   out.review = { image, verdict: r.verdict === 'worked' ? 'worked' : 'failed', issues: (Array.isArray(r.issues) ? r.issues : []).filter((i) => ISSUES.includes(i)),
-    kept: (Array.isArray(r.kept) ? r.kept : []).map(String).slice(0, 3), note: String(r.note ?? '').slice(0, 240) };
+    kept: strs(r.kept, 100, 3), note: typeof r.note === 'string' ? r.note.slice(0, 240) : '' };
   recordFeedback(run, target, out.review.verdict, out.review.issues, out.review.note);
   paint(run);
 }
@@ -1725,7 +1733,11 @@ const desktop = matchMedia('(hover: hover) and (pointer: fine)');
 $('input').addEventListener('input', autosize);
 $('input').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || e.isComposing) return;
-  if (e.ctrlKey || e.metaKey || (desktop.matches && !e.shiftKey)) { e.preventDefault(); send(); }
+  if (e.ctrlKey || e.metaKey || (desktop.matches && !e.shiftKey)) {
+    e.preventDefault();
+    // Only the button stops a run. Enter while one is going would cancel it by accident.
+    if (running) toast('Still working — tap the stop button to cancel'); else send();
+  }
 });
 $('input').addEventListener('paste', async (e) => {
   const f = [...(e.clipboardData?.files ?? [])].find((x) => x.type.startsWith('image/'));
@@ -1843,13 +1855,13 @@ thread.addEventListener('click', (e) => {
   else if (act === 'save') saveToLibrary(b.pos, b.neg, run, target);
   else if (act === 'critic') runCritic(run, target);
   else if (act === 'fixlint') {
-    send({ text: `Fix only these findings in the prompt below; change nothing else and do not add anything.\n${out.lint.items.filter((i) => i.lv !== 'info').map((i) => `- ${i.m}`).join('\n')}\n\npositive: ${b.pos}${b.neg ? `\nnegative: ${b.neg}` : ''}`, image: null, meta: { mode: 'audit', targets: [target] } });
+    send({ text: `Fix only these findings in the prompt below; change nothing else and do not add anything.\n${out.lint.items.filter((i) => i.lv !== 'info').map((i) => `- ${i.m}`).join('\n')}\n\npositive: ${b.pos}${b.neg ? `\nnegative: ${b.neg}` : ''}`, image: null, meta: { mode: 'audit', targets: [target], cast: run.meta.cast ?? [], loras: run.meta.loras ?? [] } });
   }
   // A label for the file input: the browser opens the picker itself, which some app web views allow where a scripted click is ignored.
   else if (act === 'review') { if (!caps.images) { e.preventDefault(); return toast(NO_IMAGES); } reviewFor = { run, target }; watchPicker($('reviewFile')); }
   else if (act === 'rrepair') {
     const v = out.review;
-    send({ text: `The render failed${v.issues.length ? `: ${v.issues.join(', ')}` : ''}.${v.note ? ` ${v.note}` : ''} The attached image is the failed render.`, image: v.image, meta: { mode: 'repair', targets: [target] } });
+    send({ text: `The render failed${v.issues.length ? `: ${v.issues.join(', ')}` : ''}.${v.note ? ` ${v.note}` : ''} The attached image is the failed render.`, image: v.image, meta: { mode: 'repair', targets: [target], cast: run.meta.cast ?? [], loras: run.meta.loras ?? [] } });
   }
   else if (act === 'worked') { run.fbOpen = null; recordFeedback(run, target, 'worked', [], ''); paint(run); }
   else if (act === 'failed') { run.fbOpen = run.fbOpen === target ? null : target; paint(run); }
@@ -1897,7 +1909,7 @@ $('memory').addEventListener('click', async (e) => {
     if (a === 'style') await learnStyle();
     else if (a === 'learn') await learnLessons(target);
     else if (a === 'dellesson') { memory.lessons[target].splice(+btn.dataset.i, 1); saveMemory(); }
-    else if (a === 'addlesson') { const v = e.target.closest('.panel').querySelector('[data-newlesson]').value.trim(); if (!v) return; (memory.lessons[target] ??= []).push(v); saveMemory(); }
+    else if (a === 'addlesson') { const v = e.target.closest('.panel').querySelector('[data-newlesson]').value.trim(); if (!v) return; if ((memory.lessons[target]?.length ?? 0) >= 20) return toast('Twenty lessons is the limit; remove one first'); (memory.lessons[target] ??= []).push(oneLine(v)); saveMemory(); }
     else if (a === 'delfb') { memory.feedback = memory.feedback.filter((f) => f.id !== btn.dataset.id); saveMemory(); }
     else if (a === 'backup') await makeBackup();
     else if (a === 'restore') { if (confirmTap('restore')) $('restoreFile').click(); }
