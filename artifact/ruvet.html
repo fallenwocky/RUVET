@@ -750,6 +750,10 @@ const str = (x, max = 4000) => (typeof x === 'string' ? x.slice(0, max) : '');
 const arr = (x) => (Array.isArray(x) ? x : []);
 const strs = (x, max, n) => arr(x).filter((v) => typeof v === 'string').map((v) => v.slice(0, max)).slice(-n);
 const TARGET_IDS = new Set(TARGETS.map((t) => t.id));
+// Ids end up in HTML attributes and storage keys: only plain tokens are kept, anything else gets a fresh id.
+const safeId = (x) => (typeof x === 'string' && /^[A-Za-z0-9_.:-]{1,100}$/.test(x) ? x : '');
+// One line of plain text for anything that is placed inside a prompt: no line breaks, no angle brackets, bounded.
+const oneLine = (x, max = 400) => String(x ?? '').replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
 const PREF_DEFAULTS = { mode: 'auto', targets: ['tsubaki3'], rating: 'general', aspect: '', variants: '3', compact: false, lens: '', tension: '', bold: 'balanced', full: true, optsOpen: false, chars: [], loras: [] };
 const pick = (v, allowed, d) => (allowed.includes(v) ? v : d);
 function cleanPrefs(p) {
@@ -771,47 +775,70 @@ function cleanMemory(m) {
   if (isObj(m.house)) for (const [k] of HOUSE) if (typeof m.house[k] === 'string') o.house[k] = m.house[k].slice(0, 400);
   if (isObj(m.lessons)) for (const id of TARGET_IDS) { const l = strs(m.lessons[id], 400, 20); if (l.length) o.lessons[id] = l; }
   o.feedback = arr(m.feedback).filter((f) => isObj(f) && TARGET_IDS.has(f.target) && (f.verdict === 'worked' || f.verdict === 'failed')).slice(-200)
-    .map((f, i) => ({ id: str(f.id, 100) || `fb${i}`, ts: +f.ts || 0, target: f.target, verdict: f.verdict, issues: arr(f.issues).filter((x) => ISSUES.includes(x)), note: str(f.note, 400), concept: str(f.concept, 120), ledger: str(f.ledger, 400), learned: f.learned === true }));
+    .map((f, i) => ({ id: safeId(f.id) || `fb${i}`, ts: +f.ts || 0, target: f.target, verdict: f.verdict, issues: arr(f.issues).filter((x) => ISSUES.includes(x)), note: str(f.note, 400), concept: str(f.concept, 120), ledger: str(f.ledger, 400), learned: f.learned === true }));
   o.ledger = strs(m.ledger, 400, 6);
   return o;
 }
 function cleanLibraryItem(x, i) {
   if (!isObj(x) || typeof x.positive !== 'string' || !x.positive.trim()) return null;
-  return { id: str(x.id, 100) || `lib${Date.now()}${i}`, ts: +x.ts || Date.now(), title: str(x.title, 70) || x.positive.slice(0, 70), target: TARGET_IDS.has(x.target) ? x.target : 'tsubaki3',
+  return { id: safeId(x.id) || `lib${Date.now()}${i}`, ts: +x.ts || Date.now(), title: str(x.title, 70) || x.positive.slice(0, 70), target: TARGET_IDS.has(x.target) ? x.target : 'tsubaki3',
     rating: pick(x.rating, ['general', 'sensitive', 'nsfw', 'explicit'], 'general'), concept: str(x.concept, 4000), positive: x.positive.slice(0, 20000), negative: str(x.negative, 20000) };
 }
 const cleanLibrary = (x) => arr(x).map(cleanLibraryItem).filter(Boolean);
 function cleanKit(k) {
   const o = { chars: [], loras: [] };
   if (!isObj(k)) return o;
-  o.chars = arr(k.chars).filter((c) => isObj(c) && str(c.name).trim()).slice(0, 100).map((c, i) => ({ id: str(c.id, 100) || `c${i}`, name: str(c.name, 100), series: str(c.series, 200), identity: str(c.identity, 600), outfit: str(c.outfit, 600), notes: str(c.notes, 600) }));
-  o.loras = arr(k.loras).filter((l) => isObj(l) && str(l.name).trim()).slice(0, 100).map((l, i) => ({ id: str(l.id, 100) || `l${i}`, name: str(l.name, 100), trigger: str(l.trigger, 300), weight: str(String(l.weight ?? ''), 10),
+  o.chars = arr(k.chars).filter((c) => isObj(c) && str(c.name).trim()).slice(0, 100).map((c, i) => ({ id: safeId(c.id) || `c${i}`, name: str(c.name, 100), series: str(c.series, 200), identity: str(c.identity, 600), outfit: str(c.outfit, 600), notes: str(c.notes, 600) }));
+  o.loras = arr(k.loras).filter((l) => isObj(l) && str(l.name).trim()).slice(0, 100).map((l, i) => ({ id: safeId(l.id) || `l${i}`, name: str(l.name, 100), trigger: str(l.trigger, 300), weight: str(String(l.weight ?? ''), 10),
     type: pick(l.type, ['style', 'character', 'concept'], 'style'), base: pick(l.base, ['sdxl', 'dit', 'other'], 'other') }));
   return o;
 }
-function cleanImage(img) { return isObj(img) && typeof img.data === 'string' && /^image\/(jpeg|png|webp|gif)$/.test(img.media_type) ? { media_type: img.media_type, data: img.data } : null; }
+function cleanImage(img) { return isObj(img) && typeof img.data === 'string' && img.data.length > 0 && /^[A-Za-z0-9+/]+=*$/.test(img.data) && /^image\/(jpeg|png|webp|gif)$/.test(img.media_type) ? { media_type: img.media_type, data: img.data } : null; }
+// A stored result is rebuilt field by field; only `raw` (Claude's own content blocks, replayed to the API and never shown) passes through.
+function cleanOut(o) {
+  if (!isObj(o) || typeof o.text !== 'string') return null;
+  const out = { text: o.text.slice(0, 400000), stage: 'done' };
+  if (o.local === true) out.local = true; else if (o.done === true) out.done = true;
+  if (o.x === true || (!out.local && !out.done)) out.x = true; // a result that was still streaming when it was saved
+  if (out.done && Array.isArray(o.raw)) out.raw = o.raw;
+  if (typeof o.note === 'string') out.note = o.note.slice(0, 500);
+  else if (!out.local && !out.done) out.note = 'Interrupted — this result is left out of later requests.';
+  if (o.fb === 'worked' || o.fb === 'failed') out.fb = o.fb;
+  if (isObj(o.usage) && Number.isFinite(+o.usage.in) && Number.isFinite(+o.usage.out)) out.usage = { in: Math.max(0, +o.usage.in), out: Math.max(0, +o.usage.out) };
+  if (isObj(o.critic) && typeof o.critic.text === 'string' && o.critic.text && o.critic.pending !== true) {
+    const c = out.critic = { text: o.critic.text.slice(0, 200000), verdict: pick(o.critic.verdict, ['PASS', 'FIX', 'REJECT'], '') };
+    if (typeof o.critic.pos === 'string' && o.critic.pos.trim()) { c.pos = o.critic.pos.slice(0, 20000); if (typeof o.critic.neg === 'string') c.neg = o.critic.neg.slice(0, 20000); }
+  }
+  if (isObj(o.review) && o.review.pending !== true) {
+    const image = cleanImage(o.review.image);
+    if (image) out.review = { image, verdict: pick(o.review.verdict, ['worked', 'failed'], 'failed'), issues: arr(o.review.issues).filter((x) => ISSUES.includes(x)), kept: strs(o.review.kept, 100, 3), note: str(o.review.note, 240) };
+  }
+  return out;
+}
 function cleanChat(c) {
-  if (!isObj(c) || typeof c.id !== 'string' || !Array.isArray(c.runs)) return null;
+  if (!isObj(c) || !safeId(c.id) || !Array.isArray(c.runs)) return null;
   const runs = c.runs.filter((r) => isObj(r) && isObj(r.meta) && isObj(r.outs) && arr(r.meta.targets).some((t) => TARGET_IDS.has(t))).map((r) => {
-    const meta = { ...cleanPrefs(r.meta), cast: arr(r.meta.cast).filter(isObj), loras: arr(r.meta.loras).filter(isObj) };
+    const k = cleanKit({ chars: r.meta.cast, loras: r.meta.loras });
+    const meta = { ...cleanPrefs(r.meta), cast: k.chars, loras: k.loras };
     const outs = {}, composed = {};
     for (const t of meta.targets) {
-      if (isObj(r.outs[t]) && typeof r.outs[t].text === 'string') outs[t] = { ...r.outs[t], stage: 'done' };
-      if (isObj(r.composed) && typeof r.composed[t] === 'string') composed[t] = r.composed[t];
+      const o = cleanOut(r.outs[t]);
+      if (o) { const b = finalBlocks(o); if (b.pos) o.lint = lint(t, b.pos, b.neg, meta); outs[t] = o; }
+      if (isObj(r.composed) && typeof r.composed[t] === 'string') composed[t] = r.composed[t].slice(0, 500000);
     }
-    return { id: str(r.id, 100) || String(Math.random()), text: str(r.text, 400000), meta, image: cleanImage(r.image), composed, outs, tab: meta.targets.includes(r.tab) ? r.tab : meta.targets[0] };
-  });
+    return { id: safeId(r.id) || uid(), text: str(r.text, 400000), meta, image: cleanImage(r.image), composed, outs, tab: meta.targets.includes(r.tab) ? r.tab : meta.targets[0] };
+  }).filter((r) => Object.keys(r.outs).length);
   const sys = {};
-  if (isObj(c.sys)) for (const [t, v] of Object.entries(c.sys)) if (TARGET_IDS.has(t) && isObj(v) && BUILDS[v.build] && typeof v.mem === 'string') sys[t] = { build: v.build, mem: v.mem };
+  if (isObj(c.sys)) for (const t of TARGET_IDS) { const v = c.sys[t]; if (isObj(v) && typeof v.build === 'string' && Object.hasOwn(BUILDS, v.build) && typeof v.mem === 'string') sys[t] = { build: v.build, mem: v.mem.slice(0, 20000) }; }
   const fb = {};
-  if (isObj(c.fb)) for (const [t, v] of Object.entries(c.fb)) if (TARGET_IDS.has(t)) fb[t] = strs(v, 1000, 20);
-  return { id: c.id.slice(0, 100), title: str(c.title, 200), updated: +c.updated || 0, runs, sys, fb };
+  if (isObj(c.fb)) for (const t of TARGET_IDS) { const v = strs(c.fb[t], 1000, 20).map((x) => oneLine(x, 1000)); if (v.length) fb[t] = v; }
+  return { id: c.id, title: str(c.title, 200), updated: Number.isFinite(+c.updated) ? +c.updated : 0, runs, sys, fb };
 }
 
 // ---------- persistence ----------
 const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast('Could not save (storage may be full)'); } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { warnStorage(); } },
 };
 const cfg = {}; { const saved = store.get('ruvet.settings', {}); if (isObj(saved)) for (const [k, v] of Object.entries(saved)) if (typeof v === 'string') cfg[k] = v; }
 for (const f of backend.fields) cfg[f.id] ??= f.def ?? '';
@@ -841,7 +868,9 @@ async function idb(mode, fn) {
     t.oncomplete = () => res(rq?.result); t.onerror = t.onabort = () => rej(t.error);
   });
 }
-const saveChat = () => { if (!chat.runs.length) return; chat.updated = Date.now(); return idb('readwrite', (s) => s.put(chat)).then(renderChats, () => {}); };
+let storageWarned = false;
+function warnStorage() { if (storageWarned) return; storageWarned = true; setTimeout(() => toast('This browser is not saving RUVET\'s data (storage is full or blocked). Everything works, but it will be gone when the page closes — save a backup from Memory.', 9000), 0); }
+const saveChat = () => { if (!chat.runs.length) return; chat.updated = Date.now(); return idb('readwrite', (s) => s.put(chat)).then(renderChats, warnStorage); };
 
 // ---------- state & helpers ----------
 const $ = (id) => document.getElementById(id);
@@ -1016,31 +1045,33 @@ function lint(target, pos, neg, meta) {
 }
 
 window.RUVET_LINT = lint; // exposed for tests
+// Internals for the fuzz tests; nothing in the app reads this.
+window.RUVET_TEST = { verdictOf, parseMd, extractBlocks, parseJSON, lint, oneLine, esc, cleanChat, cleanPrefs, cleanMemory, cleanKit, cleanLibrary, memoryBlock: (t) => memoryBlock(t), splitPasted: (t) => splitPasted(t), readPngPrompt: (f) => readPngPrompt(f), restoreData: (d) => restoreData(d), openChat: (id) => openChat(id), setView: (v) => setView(v), state: () => ({ chat, memory, library, kit, prefs }) };
 
 // ---------- memory: what earlier sessions taught, frozen into each chat when it starts ----------
 function memoryBlock(target) {
   const parts = [];
   const hs = HOUSE.map(([k]) => [k, (memory.house[k] || '').trim()]).filter(([, v]) => v);
-  if (hs.length) parts.push(`<house_style>\n${hs.map(([k, v]) => `${k}: ${v}`).join('\n')}\n</house_style>`);
+  if (hs.length) parts.push(`<house_style>\n${hs.map(([k, v]) => `${k}: ${oneLine(v)}`).join('\n')}\n</house_style>`);
   const lessons = memory.lessons[target] ?? [];
   const results = memory.feedback.filter((f) => f.target === target).slice(-8);
   const ledger = memory.ledger.slice(-3);
   if (lessons.length || results.length || ledger.length) {
     const m = [`<memory>`, `model: ${target}`];
-    if (lessons.length) m.push('lessons:', ...lessons.map((l) => `- ${l}`));
+    if (lessons.length) m.push('lessons:', ...lessons.map((l) => `- ${oneLine(l)}`));
     if (results.length) m.push('results:', ...results.map(resultLine));
-    if (ledger.length) m.push('ledger:', ...ledger);
+    if (ledger.length) m.push('ledger:', ...ledger.map((l) => oneLine(l)));
     m.push('</memory>'); parts.push(m.join('\n'));
   }
   return parts.length ? '\n' + parts.join('\n') + '\n' : '';
 }
 function resultLine(f) {
-  return `- ${f.verdict}${f.issues?.length ? ` (${f.issues.join(', ')})` : ''}${f.note ? ` — ${f.note}` : ''}${f.ledger ? ` | ${f.ledger}` : ''}`;
+  return `- ${f.verdict}${f.issues?.length ? ` (${f.issues.join(', ')})` : ''}${f.note ? ` — ${oneLine(f.note, 240)}` : ''}${f.ledger ? ` | ${oneLine(f.ledger)}` : ''}`;
 }
 function harvestLedger(text) {
   const lines = [...text.matchAll(/(?:Ledger|Defter):\**\s*(L\s*\|[^\n]+)/g)].map((m) => m[1].trim());
   if (!lines.length) return;
-  for (const l of lines) { memory.ledger = memory.ledger.filter((x) => x !== l); memory.ledger.push(l); }
+  for (const raw of lines) { const l = oneLine(raw); if (!l) continue; memory.ledger = memory.ledger.filter((x) => x !== l); memory.ledger.push(l); }
   memory.ledger = memory.ledger.slice(-6); saveMemory();
 }
 const lastLedger = (text) => [...text.matchAll(/(?:Ledger|Defter):\**\s*(L\s*\|[^\n]+)/g)].map((m) => m[1].trim()).pop() ?? '';
@@ -1068,7 +1099,7 @@ function compose(text, meta, target, hasImage, notes) {
   if (meta.cast?.length) head.push(`characters: ${JSON.stringify(meta.cast.map(({ name, series, identity, outfit, notes }) => ({ name, series, identity, outfit, notes })))}`);
   if (meta.loras?.length) head.push(`loras: ${JSON.stringify(meta.loras.map(({ name, trigger, weight, type, base }) => ({ name, trigger, weight: +weight || 1, type, base })))}`);
   if (hasImage) head.push('image: attached to this message');
-  for (const n of notes) head.push(`feedback: ${n}`);
+  for (const n of notes) head.push(`feedback: ${oneLine(n, 6000)}`);
   return `${head.join('\n')}\n\n${text}`.trim();
 }
 // What the next request should know about the last result for this target: a critic correction, a render report.
@@ -1121,11 +1152,15 @@ async function pipeline(run, target) {
   out.stage = 'done'; paint(run);
 }
 const addUsage = (out, u) => { if (u) out.usage = { in: (out.usage?.in ?? 0) + u.in, out: (out.usage?.out ?? 0) + u.out }; };
+function verdictOf(text) {
+  // Bounded gap between the label and the word: an unbounded \s*\**\s* here took minutes on a long run of spaces.
+  const v = (text.match(/(?:Verdict|Karar)[\s:*]{0,12}(PASS|FIX|REJECT|GEÇTİ|DÜZELT|REDDET)/i)?.[1] ?? '').toUpperCase();
+  return { 'GEÇTİ': 'PASS', 'DÜZELT': 'FIX', 'REDDET': 'REJECT' }[v] ?? v;
+}
 async function audit(target, text, onText) {
   const res = await ask({ system: await backend.loadPart('critic'), turns: [{ role: 'user', text: `Target model: ${target}\n\nSAPPHIRE output to audit:\n\n${text}` }], onText });
   const c = { text: res.text, usage: res.usage };
-  c.verdict = (res.text.match(/(?:Verdict|Karar):?\**:?\s*\**\s*(PASS|FIX|REJECT|GEÇTİ|DÜZELT|REDDET)/i)?.[1] ?? '').toUpperCase();
-  c.verdict = { 'GEÇTİ': 'PASS', 'DÜZELT': 'FIX', 'REDDET': 'REJECT' }[c.verdict] ?? c.verdict;
+  c.verdict = verdictOf(res.text);
   if (c.verdict === 'FIX') { const fixed = extractBlocks(res.text); if (fixed.pos[0]) { c.pos = fixed.pos[0]; c.neg = fixed.neg[0]; } }
   return c;
 }
@@ -1139,7 +1174,7 @@ async function critic(run, target, out) {
 // `over` runs a request the app composed itself (e.g. a repair from a render review) without touching the composer.
 async function send(over) {
   // The send button is also the stop button; a second tap within a moment of starting is a double tap, not a stop.
-  if (running) { if (!over && Date.now() - startedAt > 800) ctl?.abort(); return; }
+  if (running) { if (over) toast('Stop the current run first'); else if (Date.now() - startedAt > 800) ctl?.abort(); return; }
   const input = $('input'), text = over?.text ?? input.value.trim(), image = over ? over.image : pendingImage;
   if (!text && !image) return;
   const need = backend.needs(cfg);
@@ -1177,7 +1212,7 @@ function recordFeedback(run, target, verdict, issues, note) {
   memory.feedback = memory.feedback.slice(-200); saveMemory();
   if (run === chat.runs.at(-1)) {
     chat.fb ??= {}; (chat.fb[target] ??= []).push(verdict === 'worked' ? 'the previous output rendered well; keep what made it work'
-      : `the previous output failed on render${issues.length ? `: ${issues.join(', ')}` : ''}${note ? ` — ${note}` : ''}`);
+      : `the previous output failed on render${issues.length ? `: ${issues.join(', ')}` : ''}${note ? ` — ${oneLine(note, 400)}` : ''}`);
   }
   saveChat(); renderNav();
   toast(`Noted — RUVET will use this for ${targetInfo(target).label}`);
@@ -1261,23 +1296,23 @@ function outHTML(run, target) {
     if (risk) pills.push(`<span class="pill ${+risk[1] <= 5 ? 'good' : +risk[1] <= 7 ? 'mid' : 'bad'}">risk ${risk[1]} · ${esc(risk[2])}</span>`);
     if (out.lint) {
       const bad = (cat) => out.lint.items.filter((i) => i.cat === cat && i.lv !== 'info').length, d = bad('dialect'), bl = bad('bloat');
-      pills.push(`<span class="pill">${out.lint.count}</span>`, `<span class="pill ${d ? 'bad' : 'good'}">${d ? `dialect · ${d} issue${d > 1 ? 's' : ''}` : 'dialect clean'}</span>`, `<span class="pill ${bl ? 'mid' : 'good'}">${bl ? `bloat · ${bl}` : 'lean'}</span>`);
+      pills.push(`<span class="pill">${esc(out.lint.count)}</span>`, `<span class="pill ${d ? 'bad' : 'good'}">${d ? `dialect · ${d} issue${d > 1 ? 's' : ''}` : 'dialect clean'}</span>`, `<span class="pill ${bl ? 'mid' : 'good'}">${bl ? `bloat · ${bl}` : 'lean'}</span>`);
     }
     if (b.count > 1) pills.push(`<span class="pill">${b.count} variants</span>`);
     if (out.usage) pills.push(`<span class="pill" title="Claude tokens for this result">${kfmt(out.usage.in)} in · ${kfmt(out.usage.out)} out</span>`);
-    if (out.fb) pills.push(`<span class="pill ${out.fb === 'worked' ? 'good' : 'bad'}">${out.fb}</span>`);
+    if (out.fb) pills.push(`<span class="pill ${out.fb === 'worked' ? 'good' : 'bad'}">${esc(out.fb)}</span>`);
     h.push(`<div class="sum">${pills.join('')}</div>`);
     // On a phone the full action row sits below a long report; the two actions used most also sit here, by the prompt.
     if (done) h.push('<div class="quick"><button class="btn primary" data-act="qcopy">Copy prompt</button><label class="btn" for="reviewFile" role="button" data-act="qreview"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>Review render</label></div>');
   }
   if (b.fixed) h.push(`<div class="final"><h4>Final prompt — corrected by the critic</h4>${codeBlock(b.pos, 'pos')}${b.neg ? codeBlock(b.neg, 'neg') : ''}</div>`);
   h.push(b.fixed ? `<details class="sec"><summary>Original report</summary><div class="md">${md(out.text)}</div></details>` : `<div class="md">${md(out.text)}</div>`);
-  if (out.critic?.text) h.push(`<details class="sec"${out.critic.pending ? ' open' : ''}><summary>Critic findings${out.critic.verdict ? ` — ${out.critic.verdict}` : ''}</summary><div class="md">${md(out.critic.text)}</div></details>`);
-  if (out.lint?.items.length) h.push(`<details class="sec" open><summary>Lint</summary><ul class="lint">${out.lint.items.map((i) => `<li class="${i.lv}">${esc(i.m)}</li>`).join('')}</ul>${done && out.lint.items.some((i) => i.lv !== 'info') ? '<div class="actions"><button class="btn" data-act="fixlint">Fix these findings</button></div>' : ''}</details>`);
+  if (out.critic?.text) h.push(`<details class="sec"${out.critic.pending ? ' open' : ''}><summary>Critic findings${out.critic.verdict ? ` — ${esc(out.critic.verdict)}` : ''}</summary><div class="md">${md(out.critic.text)}</div></details>`);
+  if (out.lint?.items.length) h.push(`<details class="sec" open><summary>Lint</summary><ul class="lint">${out.lint.items.map((i) => `<li class="${esc(i.lv)}">${esc(i.m)}</li>`).join('')}</ul>${done && out.lint.items.some((i) => i.lv !== 'info') ? '<div class="actions"><button class="btn" data-act="fixlint">Fix these findings</button></div>' : ''}</details>`);
   if (out.review) {
     const v = out.review;
     h.push(`<div class="review"><img alt="Reviewed render" src="data:${v.image.media_type};base64,${v.image.data}"><div>` + (v.pending ? '<span class="dots"><i></i><i></i><i></i>Looking at the render…</span>'
-      : `<h4>Render review <span class="pill ${v.verdict === 'worked' ? 'good' : 'bad'}">${v.verdict}</span></h4>`
+      : `<h4>Render review <span class="pill ${v.verdict === 'worked' ? 'good' : 'bad'}">${esc(v.verdict)}</span></h4>`
         + (v.issues.length ? `<p><strong>Broke:</strong> ${esc(v.issues.join(', '))}</p>` : '') + (v.kept.length ? `<p><strong>Held up:</strong> ${esc(v.kept.join(', '))}</p>` : '') + (v.note ? `<p>${esc(v.note)}</p>` : '')
         + (v.verdict === 'failed' ? '<div class="actions"><button class="btn primary" data-act="rrepair">Repair with this render</button></div>' : '')) + '</div></div>');
   }
@@ -1339,10 +1374,17 @@ function setBusy(b) { document.body.classList.toggle('busy', b); $('sendBtn').se
 
 // ---------- local check: lint a pasted prompt, no Claude call ----------
 function splitPasted(text) {
-  const t = text.replace(/^\s*(positive( prompt)?|prompt( \d+)?)\s*:\s*/i, '');
-  const m = t.split(/\n\s*negative( prompt)?\s*:\s*/i);
-  const neg = (m[2] ?? '').split(/\n\s*settings\s*:/i)[0];
-  return { pos: m[0].split(/\n\s*settings\s*:/i)[0].trim(), neg: neg.trim() };
+  // Line by line, each label anchored at the start of its line: linear time whatever is pasted.
+  const part = { pos: [], neg: [] }; let cur = 'pos', started = false;
+  for (let line of text.split('\n')) {
+    const m = line.match(/^\s{0,40}(positive(?: prompt)?|prompt(?: \d{1,3})?|negative(?: prompt)?|settings)\s{0,10}:\s?/i), k = m?.[1].toLowerCase() ?? '';
+    if (k === 'settings') break;
+    if (k.startsWith('neg') && cur === 'pos') { cur = 'neg'; line = line.slice(m[0].length); }
+    else if (k && !k.startsWith('neg') && !started) line = line.slice(m[0].length);
+    if (line.trim()) started = true;
+    part[cur].push(line);
+  }
+  return { pos: part.pos.join('\n').trim(), neg: part.neg.join('\n').trim() };
 }
 function localCheck() {
   if (running) return toast('Stop the current run first');
@@ -1449,7 +1491,7 @@ function renderTest() {
     ${live ? `<div class="panel"><h3>Running <span class="pill">${live.cases.length}/${live.total}</span></h3><div class="bar-p"><i style="width:${(100 * live.cases.length) / live.total}%"></i></div>${live.cases.length ? summaryTable(live) : ''}</div>` : ''}
     ${bench.runs.map((r, i) => `<div class="panel"><h3>${new Date(r.ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })} <span class="pill">${r.cases.length} cases</span>${r.memory ? '<span class="pill">with memory</span>' : ''}</h3>
       ${summaryTable(r)}
-      <details class="sec"><summary>Every case</summary>${r.cases.map((c) => `<div class="case"><div><strong>${esc(targetInfo(c.target).label)}</strong> · ${esc(c.idea)} ${c.verdict ? `<span class="pill">${c.verdict}${c.fixed ? ' · fixed' : ''}</span>` : ''}${c.error ? `<span class="pill bad">${esc(c.error)}</span>` : ''}</div>${c.pos ? `<div class="mono">${esc(c.pos)}</div>` : ''}${c.findings.length ? `<ul class="lint">${c.findings.map((m) => `<li class="warn">${esc(m)}</li>`).join('')}</ul>` : ''}</div>`).join('')}</details>
+      <details class="sec"><summary>Every case</summary>${r.cases.map((c) => `<div class="case"><div><strong>${esc(targetInfo(c.target).label)}</strong> · ${esc(c.idea)} ${c.verdict ? `<span class="pill">${esc(c.verdict)}${c.fixed ? ' · fixed' : ''}</span>` : ''}${c.error ? `<span class="pill bad">${esc(c.error)}</span>` : ''}</div>${c.pos ? `<div class="mono">${esc(c.pos)}</div>` : ''}${c.findings.length ? `<ul class="lint">${c.findings.map((m) => `<li class="warn">${esc(m)}</li>`).join('')}</ul>` : ''}</div>`).join('')}</details>
       <div class="actions"><button class="btn" data-b="copy" data-i="${i}">Copy results as JSON</button><button class="btn ${armed.has('brun' + i) ? 'danger' : ''}" data-b="del" data-i="${i}">${armed.has('brun' + i) ? 'Delete?' : 'Delete'}</button></div></div>`).join('')
       || '<p class="none">No test runs yet. A run of the default set on one model with the critic on is 16 Claude calls.</p>'}`;
 }
@@ -1487,7 +1529,7 @@ function renderLibrary() {
     <div id="libList">${libraryList(items)}</div>`;
 }
 function libraryList(items) {
-  return items.length ? items.map((x) => `<div class="panel item" data-id="${x.id}"><h3>${esc(x.title)}</h3>
+  return items.length ? items.map((x) => `<div class="panel item" data-id="${esc(x.id)}"><h3>${esc(x.title)}</h3>
       <div class="meta"><span class="pill">${esc(targetInfo(x.target).label)}</span><span class="pill">${esc(x.rating)}</span><span class="pill">${new Date(x.ts).toLocaleDateString()}</span></div>
       ${codeBlock(x.positive, 'pos').replace('<button data-save>Save</button>', '')}${x.negative ? codeBlock(x.negative, 'neg') : ''}
       <div class="actions"><button class="btn" data-l="remix">Remix as variants</button><button class="btn ${armed.has('lib' + x.id) ? 'danger' : ''}" data-l="del">${armed.has('lib' + x.id) ? 'Delete?' : 'Delete'}</button></div></div>`).join('')
@@ -1508,7 +1550,7 @@ function renderMemory() {
         <ul class="lessons">${ls.map((l, i) => `<li><span>${esc(l)}</span><button class="x" data-m="dellesson" data-i="${i}" aria-label="Remove lesson">×</button></li>`).join('') || '<li><span class="none" style="padding:4px 0;text-align:left">No lessons yet.</span></li>'}</ul>
         <div class="rowx"><input data-newlesson placeholder="Add a rule yourself, e.g. keep both hands parked in full-body shots" style="flex:1 1 220px;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:16px"><button class="btn" data-m="addlesson">Add</button>
           <button class="btn ${n ? 'primary' : ''}" data-m="learn" ${fb.length ? '' : 'disabled'}>Learn from results${n ? ` (${n} new)` : ''}</button></div>
-        <details class="sec"><summary>Recent results (${fb.length})</summary><ul class="lessons">${fb.slice(-12).reverse().map((f) => `<li><span>${esc(f.verdict)}${f.issues?.length ? ` — ${esc(f.issues.join(', '))}` : ''}${f.note ? ` — ${esc(f.note)}` : ''}<small>${esc(f.concept || '')}</small></span><button class="x" data-m="delfb" data-id="${f.id}" aria-label="Remove result">×</button></li>`).join('')}</ul></details></div>`;
+        <details class="sec"><summary>Recent results (${fb.length})</summary><ul class="lessons">${fb.slice(-12).reverse().map((f) => `<li><span>${esc(f.verdict)}${f.issues?.length ? ` — ${esc(f.issues.join(', '))}` : ''}${f.note ? ` — ${esc(f.note)}` : ''}<small>${esc(f.concept || '')}</small></span><button class="x" data-m="delfb" data-id="${esc(f.id)}" aria-label="Remove result">×</button></li>`).join('')}</ul></details></div>`;
     }).join('') || '<div class="panel"><h3>Model lessons</h3><p class="hint" style="margin:0">Nothing yet. After you render a prompt, mark the result Worked or Failed in the Studio — RUVET keeps what it learns per model.</p></div>'}
     <div class="panel"><h3>Diversity ledger</h3><p class="hint">The last compositions RUVET produced. New chats avoid repeating their lens, light, palette and staging.</p>
       ${memory.ledger.length ? `<ul class="lessons">${memory.ledger.slice().reverse().map((l) => `<li><span class="mono">${esc(l)}</span></li>`).join('')}</ul><div class="rowx"><button class="btn" data-m="clearledger">${armed.has('ledger') ? 'Clear?' : 'Clear ledger'}</button></div>` : '<p class="hint" style="margin:0">Empty.</p>'}</div>
@@ -1525,7 +1567,7 @@ function renderKit() {
     return `<div class="fields" data-form="${kind}">${fields.map(([k, l, p]) => `<label class="field">${l}<input data-k="${k}" placeholder="${p}" value="${esc(cur[k] ?? '')}"></label>`).join('')}${extra(cur)}</div>
       <div class="rowx"><button class="btn primary" data-kit="save" data-kind="${kind}">${kitEdit[kind] ? 'Save changes' : 'Add'}</button>${kitEdit[kind] ? `<button class="btn" data-kit="cancel" data-kind="${kind}">Cancel</button>` : ''}</div>`; };
   const list = (kind, line) => kit[kind].length ? `<ul class="lessons">${kit[kind].map((x) => `<li><span><strong>${esc(x.name)}</strong><small>${esc(line(x))}</small></span>
-      <button class="btn" data-kit="edit" data-kind="${kind}" data-id="${x.id}">Edit</button><button class="x ${armed.has(kind + x.id) ? 'sure' : ''}" data-kit="del" data-kind="${kind}" data-id="${x.id}" aria-label="Delete">${armed.has(kind + x.id) ? 'Delete?' : '×'}</button></li>`).join('')}</ul>` : '';
+      <button class="btn" data-kit="edit" data-kind="${kind}" data-id="${esc(x.id)}">Edit</button><button class="x ${armed.has(kind + x.id) ? 'sure' : ''}" data-kit="del" data-kind="${kind}" data-id="${esc(x.id)}" aria-label="Delete">${armed.has(kind + x.id) ? 'Delete?' : '×'}</button></li>`).join('')}</ul>` : '';
   const sel = (k, cur, opts) => `<label class="field">${k[0].toUpperCase() + k.slice(1)}<select data-k="${k}">${opts.map((o) => `<option${cur[k] === o ? ' selected' : ''}>${o}</option>`).join('')}</select></label>`;
   $('kit').innerHTML = `<h2>Kit</h2><p class="lead">Characters and LoRAs you reuse. Pick them per request under the options in the Studio; RUVET keeps their details exact.</p>
     <div class="panel"><h3>Characters</h3><p class="hint">Recurring characters keep the same identity in every prompt.</p>${list('chars', (c) => [c.series, c.identity, c.outfit].filter(Boolean).join(' · '))}${form('chars', CHAR_F, () => '')}</div>
@@ -1556,7 +1598,10 @@ async function makeBackup() {
 }
 async function restoreBackup(file) {
   let d; try { d = JSON.parse(await file.text()); } catch { return toast('That file is not a RUVET backup'); }
-  if (d?.app !== 'RUVET.' || !Array.isArray(d.chats)) return toast('That file is not a RUVET backup');
+  return restoreData(d);
+}
+async function restoreData(d) {
+  if (!isObj(d) || d.app !== 'RUVET.' || !Array.isArray(d.chats)) return toast('That file is not a RUVET backup');
   const chats = d.chats.map(cleanChat).filter(Boolean);
   Object.assign(memory, cleanMemory(d.memory)); saveMemory();
   library = cleanLibrary(d.library); saveLibrary();
@@ -1586,8 +1631,8 @@ function syncControls() {
     + (prefs.mode === 'audit' ? '<button class="chip alt" data-local>check locally — free</button>' : '');
   $('targets').innerHTML = TARGETS.map((t) => `<button class="chip" data-target="${t.id}" aria-pressed="${prefs.targets.includes(t.id)}">${esc(t.label)}</button>`).join('');
   $('toggles').innerHTML = `<button class="chip alt" data-toggle="full" aria-pressed="${prefs.full}">critic + auto-fix</button><button class="chip alt" data-toggle="compact" aria-pressed="${prefs.compact}">compact output</button>`;
-  $('cast').innerHTML = kit.chars.map((c) => `<button class="chip" data-char="${c.id}" aria-pressed="${prefs.chars.includes(c.id)}">${esc(c.name)}</button>`).join('')
-    + kit.loras.map((l) => `<button class="chip alt" data-lora="${l.id}" aria-pressed="${prefs.loras.includes(l.id)}">LoRA: ${esc(l.name)}</button>`).join('')
+  $('cast').innerHTML = kit.chars.map((c) => `<button class="chip" data-char="${esc(c.id)}" aria-pressed="${prefs.chars.includes(c.id)}">${esc(c.name)}</button>`).join('')
+    + kit.loras.map((l) => `<button class="chip alt" data-lora="${esc(l.id)}" aria-pressed="${prefs.loras.includes(l.id)}">LoRA: ${esc(l.name)}</button>`).join('')
     || '<span class="lbl">None saved yet — add characters and LoRAs in the Kit tab.</span>';
   $('input').placeholder = MODES.find((m) => m.id === prefs.mode)?.hint ?? '';
   $('variantsWrap').hidden = prefs.mode !== 'variants';
@@ -1634,12 +1679,17 @@ const imageFail = (e) => toast(e?.user ? e.message : 'Could not read the image')
 const NO_IMAGES = 'Images cannot be sent to Claude in this view. Prompts embedded in PNGs are still read. To send images, open RUVET in a browser on claude.ai, or use the web app.';
 function setImage(img) { pendingImage = img; $('attach').hidden = !img; if (img) $('attach').querySelector('img').src = `data:${img.media_type};base64,${img.data}`; }
 async function renderChats() {
-  const all = (await idb('readonly', (s) => s.getAll()).catch(() => [])).sort((a, b) => b.updated - a.updated);
+  const all = (await idb('readonly', (s) => s.getAll()).catch(() => [])).filter((c) => isObj(c) && safeId(c.id)).sort((a, b) => (+b.updated || 0) - (+a.updated || 0));
   $('chats').innerHTML = all.length ? all.map((c) =>
-    `<li class="${c.id === chat.id ? 'cur' : ''}"><button class="open" data-id="${c.id}">${esc(c.title || 'Untitled')}<small>${new Date(c.updated).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</small></button>`
-    + (armed.has('chat' + c.id) ? `<button class="x sure" data-del="${c.id}">Delete?</button>`
-      : `<button class="icon" data-del="${c.id}" aria-label="Delete"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button>`) + '</li>').join('')
+    `<li class="${c.id === chat.id ? 'cur' : ''}"><button class="open" data-id="${esc(c.id)}">${esc(c.title || 'Untitled')}<small>${new Date(c.updated).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</small></button>`
+    + (armed.has('chat' + c.id) ? `<button class="x sure" data-del="${esc(c.id)}">Delete?</button>`
+      : `<button class="icon" data-del="${esc(c.id)}" aria-label="Delete"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button>`) + '</li>').join('')
     : '<li class="none" style="padding:10px 8px;text-align:left">No saved chats yet.</li>';
+}
+async function openChat(id) {
+  const c = cleanChat(await idb('readonly', (s) => s.get(id)).catch(() => null));
+  if (c) { chat = c; setView('studio'); renderThread(); } else toast('That chat could not be read');
+  return !!c;
 }
 async function openDrawer() { await renderChats(); $('drawer').classList.add('open'); $('scrim').hidden = false; }
 function closeDrawer() { armed.clear(); $('drawer').classList.remove('open'); $('scrim').hidden = true; }
@@ -1704,13 +1754,17 @@ async function readPngPrompt(file) {
     p += 12 + len;
   }
   if (text.parameters) {
-    const m = text.parameters.match(/^([\s\S]*?)(?:\nNegative prompt: ([\s\S]*?))?(?:\n(Steps: [^\n]*))?$/);
-    return m ? `positive: ${m[1].trim()}${m[2] ? `\nnegative: ${m[2].trim()}` : ''}${m[3] ? `\nsettings: ${m[3].trim()}` : ''}` : text.parameters.trim();
+    // Plain string search, not one regex over the whole chunk: a crafted file made that regex run for minutes.
+    const t = text.parameters.slice(0, 200000); let body = t, settings = '';
+    const last = t.lastIndexOf('\n');
+    if (last >= 0 && t.startsWith('Steps: ', last + 1)) { settings = t.slice(last + 1).trim(); body = t.slice(0, last); }
+    const n = body.indexOf('\nNegative prompt: '), pos = (n >= 0 ? body.slice(0, n) : body).trim(), neg = n >= 0 ? body.slice(n + 18).trim() : '';
+    return `positive: ${pos}${neg ? `\nnegative: ${neg}` : ''}${settings ? `\nsettings: ${settings}` : ''}`;
   }
   if (text.prompt) {
     try {
       const texts = Object.values(JSON.parse(text.prompt)).filter((n) => /CLIPTextEncode/.test(n.class_type ?? '') && typeof n.inputs?.text === 'string' && n.inputs.text.trim()).map((n) => n.inputs.text.trim());
-      if (texts.length) return texts.map((t, i) => `prompt ${i + 1}: ${t}`).join('\n');
+      if (texts.length) return texts.map((t, i) => `prompt ${i + 1}: ${t}`).join('\n').slice(0, 200000);
     } catch { /* not a ComfyUI graph */ }
   }
   return null;
@@ -1867,8 +1921,7 @@ $('chats').addEventListener('click', async (e) => {
   }
   const open = e.target.closest('[data-id]'); if (!open) return;
   if (running) return toast('Stop the current run first');
-  const c = cleanChat(await idb('readonly', (s) => s.get(open.dataset.id)).catch(() => null));
-  if (c) { chat = c; setView('studio'); renderThread(); } else toast('That chat could not be read');
+  await openChat(open.dataset.id);
   closeDrawer(); renderChats();
 });
 $('setBtn').addEventListener('click', openSettings);
