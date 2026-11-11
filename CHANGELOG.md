@@ -8,7 +8,12 @@
 - A damaged or hand-edited backup file broke every view; backups, imports and everything read from browser storage are now validated field by field, and unreadable chats are skipped and counted.
 - On a phone held sideways, opening the options pushed the Send button off the screen; short screens now keep the input row pinned.
 
+- Attaching images on phones: decoding no longer depends on `createImageBitmap` alone (it falls back to an image element, and to sending a small original when re-encoding runs out of memory); HEIC photos the browser cannot read get instructions; file inputs are no longer `display:none`, which some mobile web views refuse to open.
+- In a Claude view that cannot take images, the image button now explains why instead of disappearing, and prompts embedded in PNGs are still read.
+- Typing a note in the render-feedback form right after tapping an issue could lose the note.
+
 ### Tests
+- `tests/images.spec.js`: image attach and render review without `createImageBitmap` or with it failing, a canvas that cannot re-encode, HEIC, and a Claude view without image support.
 - `tests/stress.spec.js`: hostile markup in every place Claude's text or user text is shown, empty and malformed replies, API errors, refusals and cut-off replies, a double tap, stopping a slow reply, switching views mid-run, stopping the test bench, 40 runs in one chat, a 1500-prompt library, a 200 KB idea with pathological markdown, corrupt and oversized PNGs, a hostile backup with a `__proto__` key, junk library imports, blocked localStorage and IndexedDB, 320×568 / 568×320 / 2560×1440 screens, and CJK / RTL / emoji text.
 
 ## 1.0.0 — 2026-11-11
