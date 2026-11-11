@@ -156,12 +156,14 @@ const newChat = () => ({ id: uid(), title: '', updated: Date.now(), runs: [], sy
 let chat = newChat();
 let pendingImage = null; // { media_type, data }
 let ctl = null, running = false, startedAt = 0, caps = { images: false };
+// What the backend can do (images or not) is known once it has started; anything that depends on it waits for this.
+const capsReady = Promise.resolve().then(() => backend.init()).then((c) => { caps = c ?? caps; return c; }, () => caps);
 const armed = new Set(); // two-tap confirmations
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const targetInfo = (id) => TARGETS.find((t) => t.id === id) ?? TARGETS[0];
 const GEM = '<svg class="gem" viewBox="0 0 24 24"><path d="M7 3h10l5 6-10 12L2 9z"/><path d="M2 9h20M7 3l5 6 5-6M12 9v12"/></svg>';
 let toastTimer;
-function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3600); }
+function toast(msg, ms = 3600) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms); }
 function copyText(text, codeEl) {
   const fallback = () => {
     if (codeEl) { const r = document.createRange(); r.selectNodeContents(codeEl); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Text selected — copy it'); }
@@ -588,7 +590,7 @@ function outHTML(run, target) {
     h.push(`<div class="actions"><button class="btn primary" data-act="copyp">Copy prompt</button>${b.neg ? '<button class="btn" data-act="copyn">Copy negative</button>' : ''}`
       + `<button class="btn" data-act="save">Save</button>`
       + (out.done && !out.critic ? '<button class="btn" data-act="critic">Run critic</button>' : '')
-      + (caps.images ? '<button class="btn" data-act="review">Review render</button>' : '')
+      + '<label class="btn" for="reviewFile" role="button" data-act="review">Review render</label>'
       + `<button class="btn ${out.fb === 'worked' ? 'on' : ''}" data-act="worked">Worked</button><button class="btn ${out.fb === 'failed' ? 'off' : ''}" data-act="failed">Failed</button></div>`);
     if (run.fbOpen === target) {
       const d = run.fbDraft ?? { issues: [] };
@@ -900,12 +902,40 @@ function syncControls() {
   store.set('ruvet.prefs', prefs);
 }
 function autosize() { const t = $('input'); t.style.height = 'auto'; t.style.height = `${Math.min(t.scrollHeight + 2, 160)}px`; }
-async function readImage(file) {
-  const bmp = await createImageBitmap(file), k = Math.min(1, 1568 / Math.max(bmp.width, bmp.height));
-  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
-  return { media_type: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.88).split(',')[1] };
+// Images are downscaled to the API's useful size and re-encoded as JPEG. Phones are where this fails most:
+// createImageBitmap is missing or refuses large camera photos in some mobile browsers and in-app views, and iOS
+// can hand over HEIC. So decoding falls back to an <img> element, and then to sending a small enough file as it is.
+const imageError = (message) => Object.assign(new Error(message), { user: true });
+async function decodeImage(file) {
+  if (typeof createImageBitmap === 'function') { try { const b = await createImageBitmap(file); return { src: b, w: b.width, h: b.height, done: () => b.close?.() }; } catch { /* fall back */ } }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image(); img.src = url;
+    await (img.decode ? img.decode() : new Promise((res, rej) => { img.onload = res; img.onerror = rej; }));
+    if (!img.naturalWidth) throw new Error('no size');
+    return { src: img, w: img.naturalWidth, h: img.naturalHeight, done: () => URL.revokeObjectURL(url) };
+  } catch { URL.revokeObjectURL(url); return null; }
 }
+const readAsBase64 = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] ?? ''); r.onerror = () => rej(r.error); r.readAsDataURL(file); });
+async function readImage(file) {
+  const heic = /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name ?? '');
+  const d = await decodeImage(file);
+  if (d) {
+    try {
+      const k = Math.min(1, 1568 / Math.max(d.w, d.h)), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(d.w * k)); c.height = Math.max(1, Math.round(d.h * k));
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(d.src, 0, 0, c.width, c.height);
+      const data = c.toDataURL('image/jpeg', 0.88).split(',')[1] ?? '';
+      if (data.length > 100) return { media_type: 'image/jpeg', data };
+    } catch { /* re-encoding failed (often memory on phones): send the decodable original if it is small enough */ } finally { d.done(); }
+    if (/^image\/(jpeg|png|webp|gif)$/.test(file.type) && file.size <= 3.5e6) return { media_type: file.type, data: await readAsBase64(file) };
+    throw imageError('This image is too large to prepare on this device. Try a smaller JPEG or PNG.');
+  }
+  if (heic) throw imageError('This photo is HEIC, which this browser cannot read. On iPhone, set Settings → Camera → Formats to Most Compatible, or share the photo as JPEG.');
+  throw imageError(/^image\//.test(file.type) ? 'Could not read the image. It may be damaged; try a JPEG or PNG.' : 'That file is not an image.');
+}
+const imageFail = (e) => toast(e?.user ? e.message : 'Could not read the image');
+const NO_IMAGES = 'Images cannot be sent to Claude in this view. Prompts embedded in PNGs are still read. To send images, open RUVET in a browser on claude.ai, or use the web app.';
 function setImage(img) { pendingImage = img; $('attach').hidden = !img; if (img) $('attach').querySelector('img').src = `data:${img.media_type};base64,${img.data}`; }
 async function renderChats() {
   const all = (await idb('readonly', (s) => s.getAll()).catch(() => [])).sort((a, b) => b.updated - a.updated);
@@ -953,7 +983,7 @@ $('input').addEventListener('keydown', (e) => {
 });
 $('input').addEventListener('paste', async (e) => {
   const f = [...(e.clipboardData?.files ?? [])].find((x) => x.type.startsWith('image/'));
-  if (!f || !caps.images) return;
+  if (!f) return;
   e.preventDefault(); attachFile(f);
 });
 $('sendBtn').addEventListener('click', () => send());
@@ -989,22 +1019,38 @@ async function readPngPrompt(file) {
   }
   return null;
 }
+// The embedded PNG prompt is read on the device, so it works even where images cannot be sent to Claude.
 async function attachFile(f) {
-  try { setImage(await readImage(f)); } catch { return toast('Could not read the image'); }
+  await capsReady;
   const embedded = await readPngPrompt(f).catch(() => null);
+  if (caps.images) { try { setImage(await readImage(f)); } catch (e) { if (!embedded) return imageFail(e); } }
   if (embedded && !$('input').value.trim()) {
     $('input').value = embedded; autosize();
     if (prefs.mode === 'auto' || prefs.mode === 'generate') { prefs.mode = 'audit'; syncControls(); }
-    toast('Read the prompt embedded in this PNG');
-  }
+    toast(caps.images ? 'Read the prompt embedded in this PNG' : 'Read the prompt embedded in this PNG (the image itself cannot be sent in this view)');
+  } else if (!caps.images) toast(NO_IMAGES);
 }
 let reviewFor = null;
-$('imgBtn').addEventListener('click', () => $('file').click());
+// Some app web views (the Claude Android app among them, as reported) open no picker at all for a page's file input.
+// The page cannot tell for sure, but on a touch screen an opened picker takes the focus away; if nothing happens, say what to do.
+const NO_PICKER = 'Nothing opened? This app may not let pages pick files. Open RUVET in your phone\'s browser at claude.ai, or use the web app — both can attach images.';
+function watchPicker(input) {
+  if (!matchMedia('(hover: none)').matches) return;
+  let opened = false; const mark = () => { opened = true; };
+  window.addEventListener('blur', mark, { once: true }); document.addEventListener('visibilitychange', mark, { once: true });
+  input.addEventListener('change', mark, { once: true }); input.addEventListener('cancel', mark, { once: true });
+  setTimeout(() => {
+    window.removeEventListener('blur', mark); document.removeEventListener('visibilitychange', mark);
+    if (!opened && document.visibilityState === 'visible') toast(NO_PICKER, 9000);
+  }, 1800);
+}
+$('imgBtn').addEventListener('click', () => watchPicker($('file')));
+$('imgBtn').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } });
 $('file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) attachFile(f); });
 $('reviewFile').addEventListener('change', async (e) => {
   const f = e.target.files[0]; e.target.value = ''; if (!f || !reviewFor) return;
   const { run, target } = reviewFor; reviewFor = null;
-  let img; try { img = await readImage(f); } catch { return toast('Could not read the image'); }
+  let img; try { img = await readImage(f); } catch (e) { return imageFail(e); }
   await reviewRender(run, target, img); saveChat();
 });
 $('attachDel').addEventListener('click', () => setImage(null));
@@ -1032,7 +1078,8 @@ thread.addEventListener('click', (e) => {
   const tab = e.target.closest('[data-tab]');
   if (tab) { run.tab = tab.dataset.tab; return paint(run); }
   const issue = e.target.closest('[data-issue]');
-  if (issue) { const d = run.fbDraft ??= { issues: [] }; const i = issue.dataset.issue; d.issues = d.issues.includes(i) ? d.issues.filter((x) => x !== i) : [...d.issues, i]; return paint(run); }
+  // Toggle the chip in place: re-rendering the card here would replace the note field and lose what is being typed.
+  if (issue) { const d = run.fbDraft ??= { issues: [] }; const i = issue.dataset.issue; d.issues = d.issues.includes(i) ? d.issues.filter((x) => x !== i) : [...d.issues, i]; issue.setAttribute('aria-pressed', d.issues.includes(i)); return; }
   const act = e.target.closest('[data-act]')?.dataset.act; if (!act || !out) return;
   const b = finalBlocks(out);
   if (act === 'copyp') copyText(b.pos);
@@ -1043,7 +1090,8 @@ thread.addEventListener('click', (e) => {
   else if (act === 'fixlint') {
     send({ text: `Fix only these findings in the prompt below; change nothing else and do not add anything.\n${out.lint.items.filter((i) => i.lv !== 'info').map((i) => `- ${i.m}`).join('\n')}\n\npositive: ${b.pos}${b.neg ? `\nnegative: ${b.neg}` : ''}`, image: null, meta: { mode: 'audit', targets: [target] } });
   }
-  else if (act === 'review') { reviewFor = { run, target }; $('reviewFile').click(); }
+  // A label for the file input: the browser opens the picker itself, which some app web views allow where a scripted click is ignored.
+  else if (act === 'review') { if (!caps.images) { e.preventDefault(); return toast(NO_IMAGES); } reviewFor = { run, target }; watchPicker($('reviewFile')); }
   else if (act === 'rrepair') {
     const v = out.review;
     send({ text: `The render failed${v.issues.length ? `: ${v.issues.join(', ')}` : ''}.${v.note ? ` ${v.note}` : ''} The attached image is the failed render.`, image: v.image, meta: { mode: 'repair', targets: [target] } });
@@ -1139,5 +1187,5 @@ $('wipeBtn').addEventListener('click', async () => {
 
 syncControls(); setView('studio'); renderThread(); renderChats();
 if (desktop.matches) $('input').focus();
-Promise.resolve(backend.init()).then((c) => { caps = c ?? caps; $('imgBtn').hidden = !caps.images; if (c?.off && !chat.runs.length) renderThread(); });
+capsReady.then((c) => { if (c?.off && !chat.runs.length) renderThread(); });
 };

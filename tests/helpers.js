@@ -77,7 +77,7 @@ async function openWeb(page, { key = true, override } = {}) {
 
 // The single-file artifact (artifact/ruvet.html) with the viewer's Claude (`sample`) and `downloads` mocked.
 // `override` as for openWeb, except errors are { code } (the sample capability's error codes) and { truncated, text }.
-async function openArtifact(page, { override } = {}) {
+async function openArtifact(page, { override, images = true } = {}) {
   const calls = [], saved = [];
   const html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}[hidden]{display:none!important}</style></head><body>'
     + fs.readFileSync(path.join(ROOT, 'artifact', 'ruvet.html'), 'utf8') + '</body></html>';
@@ -91,7 +91,7 @@ async function openArtifact(page, { override } = {}) {
     return typeof o === 'string' ? o : reply(system, user);
   });
   await page.exposeFunction('__ruvetSave', (filename, data) => { saved.push({ filename, data }); });
-  await page.addInitScript(() => {
+  await page.addInitScript((images) => {
     const sample = async (input, o) => {
       const r = await window.__ruvetReply(input, !!o.images);
       if (r && r.__err) throw { code: r.__err, message: 'mock' };
@@ -99,10 +99,10 @@ async function openArtifact(page, { override } = {}) {
       if (!text) throw { code: 'empty_completion', message: 'mock' };
       o.onText({ text, delta: text }); return { text, truncated };
     };
-    sample.limits = async () => ({ maxPromptBytes: 262144, images: { maxCount: 1, maxInputBytes: 20e6, mediaTypes: ['image/jpeg', 'image/png'] } });
+    sample.limits = async () => (images ? { maxPromptBytes: 262144, images: { maxCount: 1, maxInputBytes: 20e6, mediaTypes: ['image/jpeg', 'image/png'] } } : { maxPromptBytes: 262144 });
     const downloads = { save: async (r) => { await window.__ruvetSave(r.filename, String(r.data)); return {}; } };
     window.claude = { use: async (name) => (name === 'sample' ? sample : name === 'downloads' ? downloads : null) };
-  });
+  }, images);
   await page.goto('https://artifact.test/');
   return { kind: 'artifact', calls, saved };
 }

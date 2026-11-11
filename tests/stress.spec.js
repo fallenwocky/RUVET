@@ -208,7 +208,10 @@ for (const kind of ['web', 'artifact']) {
       await expect(page.locator('#attach')).toBeHidden();
       const truncated = pngWithText('parameters', 'a, b').subarray(0, 60);
       await page.setInputFiles('#file', { name: 'cut.png', mimeType: 'image/png', buffer: truncated });
+      // The image cannot be decoded, but its prompt chunk is complete, so the prompt is still read.
+      await expect(page.locator('#input')).toHaveValue('positive: a, b');
       await expect(page.locator('#attach')).toBeHidden();
+      await page.fill('#input', '');
       await page.setInputFiles('#file', { name: 'big.png', mimeType: 'image/png', buffer: pngWithText('parameters', 'tag, '.repeat(400_000)) });
       await expect(page.locator('#input')).toHaveValue(/^positive: tag, tag/);
       expect(errors).toEqual([]);
