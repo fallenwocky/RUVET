@@ -826,7 +826,7 @@ function cleanChat(c) {
       if (o) { const b = finalBlocks(o); if (b.pos) o.lint = lint(t, b.pos, b.neg, meta); outs[t] = o; }
       if (isObj(r.composed) && typeof r.composed[t] === 'string') composed[t] = r.composed[t].slice(0, 500000);
     }
-    return { id: safeId(r.id) || uid(), text: str(r.text, 400000), meta, image: cleanImage(r.image), composed, outs, tab: meta.targets.includes(r.tab) ? r.tab : meta.targets[0] };
+    return { id: safeId(r.id) || uid(), ts: Number.isFinite(+r.ts) ? +r.ts : 0, text: str(r.text, 400000), meta, image: cleanImage(r.image), composed, outs, tab: meta.targets.includes(r.tab) ? r.tab : meta.targets[0] };
   }).filter((r) => Object.keys(r.outs).length);
   const sys = {};
   if (isObj(c.sys)) for (const t of TARGET_IDS) { const v = c.sys[t]; if (isObj(v) && typeof v.build === 'string' && Object.hasOwn(BUILDS, v.build) && typeof v.mem === 'string') sys[t] = { build: v.build, mem: v.mem.slice(0, 20000) }; }
@@ -870,7 +870,31 @@ async function idb(mode, fn) {
 }
 let storageWarned = false;
 function warnStorage() { if (storageWarned) return; storageWarned = true; setTimeout(() => toast('This browser is not saving RUVET\'s data (storage is full or blocked). Everything works, but it will be gone when the page closes — save a backup from Memory.', 9000), 0); }
-const saveChat = () => { if (!chat.runs.length) return; chat.updated = Date.now(); return idb('readwrite', (s) => s.put(chat)).then(renderChats, warnStorage); };
+// Another tab may have saved this chat since it was last read here. Read and write in one transaction, and keep
+// any runs the stored copy has that this one lacks, so two tabs on the same chat never erase each other's results.
+const peers = typeof BroadcastChannel === 'function' ? new BroadcastChannel('ruvet') : null;
+async function saveChat() {
+  if (!chat.runs.length) return;
+  const mine = chat;
+  try {
+    const d = await db();
+    const added = await new Promise((res, rej) => {
+      const t = d.transaction('chats', 'readwrite'), st = t.objectStore('chats'), g = st.get(mine.id); let n = 0;
+      g.onsuccess = () => {
+        const stored = cleanChat(g.result);
+        if (stored && stored.updated !== mine.seen) {
+          const have = new Set(mine.runs.map((r) => r.id)), extra = stored.runs.filter((r) => !have.has(r.id));
+          if (extra.length) { n = extra.length; mine.runs = [...extra, ...mine.runs].map((r, i) => [r, i]).sort((a, b) => ((a[0].ts || 0) - (b[0].ts || 0)) || (a[1] - b[1])).map(([r]) => r); }
+        }
+        mine.updated = Date.now(); st.put(mine);
+      };
+      t.oncomplete = () => res(n); t.onerror = t.onabort = () => rej(t.error);
+    });
+    mine.seen = mine.updated;
+    if (added && mine === chat) { renderThread(); toast('This chat was also changed in another tab; both sets of results are kept.', 6000); }
+    renderChats(); peers?.postMessage('chats');
+  } catch { warnStorage(); }
+}
 
 // ---------- state & helpers ----------
 const $ = (id) => document.getElementById(id);
@@ -1182,7 +1206,7 @@ async function send(over) {
   if (need) { openSettings(); toast(need); return; }
   const meta = { ...prefs, targets: [...prefs.targets], ...over?.meta };
   meta.cast = over?.meta?.cast ?? kit.chars.filter((c) => prefs.chars.includes(c.id)); meta.loras = over?.meta?.loras ?? kit.loras.filter((l) => prefs.loras.includes(l.id));
-  const run = { id: uid(), text, meta, image, composed: {}, outs: {}, tab: meta.targets[0] };
+  const run = { id: uid(), ts: Date.now(), text, meta, image, composed: {}, outs: {}, tab: meta.targets[0] };
   for (const t of meta.targets) run.composed[t] = compose(text, meta, t, !!image, notesFor(t));
   // Queued render feedback is consumed only for the targets this run addresses.
   const fbBefore = { ...chat.fb }; chat.fb = { ...chat.fb }; for (const t of meta.targets) delete chat.fb[t];
@@ -1399,7 +1423,7 @@ function localCheck() {
   if (running) return toast('Stop the current run first');
   const text = $('input').value.trim(); if (!text) return toast('Paste a prompt to check');
   const { pos, neg } = splitPasted(text), meta = { ...prefs, targets: [...prefs.targets], cast: [], loras: kit.loras.filter((l) => prefs.loras.includes(l.id)) };
-  const run = { id: uid(), text, meta: { ...meta, full: false }, image: null, composed: {}, outs: {}, tab: meta.targets[0] };
+  const run = { id: uid(), ts: Date.now(), text, meta: { ...meta, full: false }, image: null, composed: {}, outs: {}, tab: meta.targets[0] };
   for (const t of meta.targets) {
     const L = lint(t, pos, neg, meta);
     run.outs[t] = { local: true, stage: 'done', lint: L, text: `### Local check — ${targetInfo(t).label}\n${L.items.length ? `${L.items.length} finding${L.items.length > 1 ? 's' : ''}; ${L.count}.` : `No findings; ${L.count}.`}\n#### 🟢 Positive\n\`\`\`text\n${pos}\n\`\`\`\n${neg ? `#### 🔴 Negative\n\`\`\`text\n${neg}\n\`\`\`\n` : ''}` };
@@ -1699,7 +1723,7 @@ async function renderChats() {
 }
 async function openChat(id) {
   const c = cleanChat(await idb('readonly', (s) => s.get(id)).catch(() => null));
-  if (c) { chat = c; setView('studio'); renderThread(); } else toast('That chat could not be read');
+  if (c) { c.seen = c.updated; chat = c; setView('studio'); renderThread(); } else toast('That chat could not be read');
   return !!c;
 }
 // On a phone the closed drawer is only moved off screen; `inert` keeps the keyboard and screen readers out of it.
@@ -1964,6 +1988,19 @@ $('wipeBtn').addEventListener('click', async () => {
   location.reload();
 });
 
+// Other tabs: pick up their changes to memory, library and kit instead of overwriting them with this tab's older copy.
+window.addEventListener('storage', (e) => {
+  if (e.key === 'ruvet.memory') Object.assign(memory, cleanMemory(store.get('ruvet.memory', {})));
+  else if (e.key === 'ruvet.library') library = cleanLibrary(store.get('ruvet.library', []));
+  else if (e.key === 'ruvet.kit') { Object.assign(kit, cleanKit(store.get('ruvet.kit', {}))); syncControls(); }
+  else return;
+  const v = document.body.dataset.view;
+  if (v === 'library' && !document.activeElement?.closest?.('#library')) renderLibrary();
+  if (v === 'kit' && !document.activeElement?.closest?.('#kit')) renderKit();
+  if (v === 'memory' && !document.activeElement?.closest?.('#memory')) renderMemory();
+  renderNav();
+});
+if (peers) peers.onmessage = () => renderChats();
 syncControls(); setView('studio'); renderThread(); renderChats();
 if (desktop.matches) $('input').focus();
 capsReady.then((c) => { if (c?.off && !chat.runs.length) renderThread(); });

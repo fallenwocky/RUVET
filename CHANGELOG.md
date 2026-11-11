@@ -28,6 +28,7 @@
 - Keyboard and screen readers: on a phone the closed history drawer could still be tabbed into; *Review render* could not be reached or pressed from the keyboard; five inputs had no accessible name; the results area announced every streamed repaint. Escape now closes the drawer and focus returns to the menu button.
 - A queued repaint could replace a result card just after it finished, dropping focus from a control inside it.
 - The artifact said "the chat is too long" when a single message was too long.
+- Two tabs on the same chat erased each other's results (the last save won). A save now reads and writes in one transaction and keeps the runs the other tab added; memory, library and kit changes in one tab reach the others instead of being overwritten.
 - Lessons that were not text, settings outside their options, and words like "constructor" in the repeated-word count are handled.
 
 ### Docs

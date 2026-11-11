@@ -145,6 +145,69 @@ test.describe('long sessions stay bounded', () => {
   });
 });
 
+test.describe('two tabs', () => {
+  test('both writing the same chat keep each other\'s results', async ({ page, context }) => {
+    await openWeb(page);
+    await send(page, 'From tab A, first', 1);
+    const b = await context.newPage();
+    await openWeb(b);
+    await expect(b.locator('#chats .open').first()).toBeAttached();
+    await b.evaluate(() => document.querySelector('#chats .open').click());
+    await expect(b.locator('#thread > .run')).toHaveCount(1);
+    await send(b, 'From tab B', 2);
+    await send(page, 'From tab A, second', 3);
+    await expect(page.locator('#toast')).toContainText('another tab');
+    await expect(page.locator('#thread > .run .user .bubble')).toHaveText(['From tab A, first', 'From tab B', 'From tab A, second']);
+    await b.reload();
+    await expect(b.locator('#chats .open').first()).toBeAttached();
+    await b.evaluate(() => document.querySelector('#chats .open').click());
+    await expect(b.locator('#thread > .run')).toHaveCount(3);
+    await expect(b.locator('#chats .open')).toHaveCount(1);
+  });
+
+  test('memory, library and kit changes reach the other tab', async ({ page, context }) => {
+    await openWeb(page);
+    const b = await context.newPage();
+    await openWeb(b);
+    await send(page, 'An idea', 1);
+    await page.click('.actions [data-act="worked"]'); await page.click('.actions [data-act="save"]');
+    await page.click('[data-view="kit"]'); await page.fill('[data-form="chars"] [data-k="name"]', 'Mira'); await page.click('[data-kit="save"][data-kind="chars"]');
+    await expect.poll(() => b.evaluate(() => { const s = window.RUVET_TEST.state(); return [s.memory.feedback.length, s.library.length, s.kit.chars.length]; })).toEqual([1, 1, 1]);
+    await expect(b.locator('[data-view="library"]')).toContainText('1');
+    await expect(b.locator('#chats .open')).toHaveCount(1);
+    // Tab B now saves something of its own: it must not drop what tab A added.
+    await send(b, 'From B', 1); await b.click('.actions [data-act="save"]');
+    expect(await b.evaluate(() => JSON.parse(localStorage.getItem('ruvet.library')).length)).toBe(1); // same prompt text: already in the library, not duplicated
+    expect(await b.evaluate(() => JSON.parse(localStorage.getItem('ruvet.memory')).feedback.length)).toBe(1);
+  });
+});
+
+test('the API request replays history exactly: image, raw content, cached system', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'one run is enough');
+  const app = await openWeb(page);
+  await page.setInputFiles('#file', { name: 'p.png', mimeType: 'image/png', buffer: pngWithText('x', 'y') });
+  await send(page, 'First, with an image', 1);
+  await send(page, 'Second', 2);
+  const body = compiles(app.calls).at(-1).body;
+  expect(body.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
+  expect(body.messages[0].content.map((c) => c.type)).toEqual(['image', 'text']);
+  expect(body.messages[0].content[0].source).toMatchObject({ type: 'base64', media_type: 'image/jpeg' });
+  expect(body.messages[1].content.map((c) => c.type)).toEqual(['thinking', 'text']);
+  expect(body.messages[1].content[0].signature).toBe('sig-test');
+  expect(body.messages[2].content.map((c) => c.type)).toEqual(['text']);
+  expect(body.system).toHaveLength(1);
+  expect(body.system[0].cache_control).toEqual({ type: 'ephemeral' });
+  expect(body.system[0].text).toBe(compiles(app.calls)[0].body.system[0].text);
+  expect(body).toMatchObject({ model: 'claude-opus-5-5', thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, fallbacks: 'default' });
+  // After a reload the stored chat must still replay the same content.
+  await page.reload();
+  await expect(page.locator('#chats .open').first()).toBeAttached();
+  await page.evaluate(() => document.querySelector('#chats .open').click());
+  await send(page, 'Third', 3);
+  const again = compiles(app.calls).at(-1).body;
+  expect(again.messages.slice(0, 3)).toEqual(body.messages);
+});
+
 test('a failed case in the test bench is recorded and the run goes on', async ({ page }) => {
   let n = 0;
   await openWeb(page, { override: (system) => (system.startsWith('# SAPPHIRE VISION') && ++n === 1 ? { status: 400, message: 'bad' } : undefined) });
