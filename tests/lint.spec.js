@@ -53,6 +53,21 @@ test('knows each model\'s own rules', async () => {
   expect(messages(await lint('tsubaki3', 'A girl, (smile:1.2), standing by a window in soft light.'))).toContain('Weight syntax');
 });
 
+test('counts hybrid tags and sentences exactly', async () => {
+  const [pos, neg] = DEMOS.anima;
+  expect((await lint('anima', pos, neg)).count).toBe('24 tags + 2 sentences');
+  const three = (await lint('anima', 'masterpiece, best quality, score_7, safe, 1girl, solo, kitchen. She stirs the pot. Her left hand rests on the handle. Light comes from the window.'));
+  expect(three.count).toBe('7 tags + 3 sentences');
+  expect(messages(three)).not.toContain('sentences — the hybrid pack allows 3');
+  const four = await lint('anima', 'masterpiece, best quality, score_7, safe, 1girl, solo, kitchen. One. Two. Three. Four.');
+  expect(messages(four)).toContain('4 sentences — the hybrid pack allows 3');
+});
+
+test('repeated-word counting is not fooled by words that are object properties', async () => {
+  const r = await lint('flux', 'The constructor stands by the constructor shed while a constructor waves at another constructor near the valueOf sign.');
+  expect(messages(r)).toContain('Repeated words: constructor ×4');
+});
+
 test('checks LoRAs against the target', async () => {
   const lora = { name: 'ink', trigger: 'inkwash style', weight: '1.2', type: 'style', base: 'sdxl' };
   expect(messages(await lint('tsubaki3', 'A girl reading by a window in soft morning light.', '', { loras: [lora] }))).toContain('is an SDXL LoRA; it does not run on Tsubaki.3');

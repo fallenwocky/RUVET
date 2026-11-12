@@ -27,7 +27,18 @@ jobs:
       - name: The artifact build matches docs/
         run: npm run check:artifact
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
+      # The runner image already has what Chromium needs; this only adds extra
+      # fonts. Ubuntu's package mirrors are sometimes unreachable from the
+      # runner, so two short attempts and then carry on: if a library really
+      # is missing, the tests fail and say so.
+      - name: Install system packages for Chromium (best effort)
+        run: |
+          for attempt in 1 2; do
+            if timeout 120 npx playwright install-deps chromium; then exit 0; fi
+            echo "Attempt $attempt failed"; sleep 10
+          done
+          echo "::warning::System packages for Chromium were not installed; running the tests anyway."
       - name: Tests (phone and desktop, web app and artifact)
         run: npm test
       - name: Keep the report when something fails

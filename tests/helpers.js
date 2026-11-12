@@ -40,9 +40,12 @@ function reply(system, user) {
 function sse(text, stop = 'end_turn') {
   const ev = (type, data) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
   return ev('message_start', { message: { id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content: [], stop_reason: null, usage: { input_tokens: 1200, cache_read_input_tokens: 9000, output_tokens: 1 } } })
-    + ev('content_block_start', { index: 0, content_block: { type: 'text', text: '' } })
-    + ev('content_block_delta', { index: 0, delta: { type: 'text_delta', text } })
+    + ev('content_block_start', { index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } })
+    + ev('content_block_delta', { index: 0, delta: { type: 'signature_delta', signature: 'sig-test' } })
     + ev('content_block_stop', { index: 0 })
+    + ev('content_block_start', { index: 1, content_block: { type: 'text', text: '' } })
+    + ev('content_block_delta', { index: 1, delta: { type: 'text_delta', text } })
+    + ev('content_block_stop', { index: 1 })
     + ev('message_delta', { delta: { stop_reason: stop }, usage: { output_tokens: 640 } })
     + ev('message_stop', {});
 }
@@ -112,8 +115,8 @@ const compiles = (calls) => calls.filter((c) => c.system.startsWith('# SAPPHIRE 
 const critics = (calls) => calls.filter((c) => c.system.includes('SAPPHIRE CRITIC'));
 
 async function idle(page, runs) {
-  await expect(page.locator('.run')).toHaveCount(runs);
-  await expect(page.locator('body')).not.toHaveClass(/busy/);
+  await expect(page.locator('body')).not.toHaveClass(/busy/, { timeout: 20_000 });
+  await expect(page.locator('#thread > .run')).toHaveCount(runs);
 }
 async function toggleTarget(page, id) {
   await page.click('#optsBtn');

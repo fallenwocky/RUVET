@@ -66,7 +66,7 @@ label.btn { display: inline-flex; align-items: center; }
 .pipe .st.ok { color: var(--text); } .pipe .st.ok::before { background: var(--pos); }
 .pipe .st.warn { color: var(--text); } .pipe .st.warn::before { background: var(--warn); }
 .pipe .st.err { color: var(--text); } .pipe .st.err::before { background: var(--neg); }
-.pipe .st.run { color: var(--text); border-color: var(--accent); } .pipe .st.run::before { background: var(--accent); animation: blink 1s infinite; }
+.pipe .st.going { color: var(--text); border-color: var(--accent); } .pipe .st.going::before { background: var(--accent); animation: blink 1s infinite; }
 .pipe .sep { width: 10px; height: 1px; background: var(--line); }
 .sum { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .sum .pill { font-size: 12px; padding: 1px 9px; color: var(--text); }
@@ -128,7 +128,7 @@ details.sec > summary { cursor: pointer; font-size: 12.5px; color: var(--dim); p
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); animation: blink 1.2s infinite; }
 .dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; margin-right: 6px; }
 @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .dots i, .pipe .st.run::before { animation: none; } #drawer { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .dots i, .pipe .st.going::before { animation: none; } #drawer { transition: none !important; } }
 
 .empty { max-width: 560px; margin: 4vh auto 0; text-align: center; color: var(--dim); }
 .empty .gem { width: 48px; height: 48px; stroke-width: 1.2; }
@@ -259,7 +259,7 @@ dialog small { font-size: 11.5px; }
     <button id="setBtn" class="icon" aria-label="Settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
   </header>
 
-  <main id="thread" aria-live="polite"></main>
+  <main id="thread" aria-label="Results"></main>
   <section id="library" class="page" hidden></section>
   <section id="kit" class="page" hidden></section>
   <section id="memory" class="page" hidden></section>
@@ -286,7 +286,7 @@ dialog small { font-size: 11.5px; }
     <div class="inputrow">
       <label id="imgBtn" class="icon" for="file" role="button" tabindex="0" aria-label="Attach image"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg></label>
       <button id="sparkBtn" class="icon" aria-label="Spark ideas" title="Spark ideas"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7z"/></svg></button>
-      <textarea id="input" rows="1" placeholder="Type an idea, a prompt or a problem…"></textarea>
+      <textarea id="input" rows="1" aria-label="Your idea, prompt or problem" placeholder="Type an idea, a prompt or a problem…"></textarea>
       <button id="sendBtn" class="send" aria-label="Send"><svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><svg class="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>
     </div>
     <input id="file" class="file-input" type="file" accept="image/*" tabindex="-1" aria-hidden="true">
@@ -750,6 +750,10 @@ const str = (x, max = 4000) => (typeof x === 'string' ? x.slice(0, max) : '');
 const arr = (x) => (Array.isArray(x) ? x : []);
 const strs = (x, max, n) => arr(x).filter((v) => typeof v === 'string').map((v) => v.slice(0, max)).slice(-n);
 const TARGET_IDS = new Set(TARGETS.map((t) => t.id));
+// Ids end up in HTML attributes and storage keys: only plain tokens are kept, anything else gets a fresh id.
+const safeId = (x) => (typeof x === 'string' && /^[A-Za-z0-9_.:-]{1,100}$/.test(x) ? x : '');
+// One line of plain text for anything that is placed inside a prompt: no line breaks, no angle brackets, bounded.
+const oneLine = (x, max = 400) => String(x ?? '').replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
 const PREF_DEFAULTS = { mode: 'auto', targets: ['tsubaki3'], rating: 'general', aspect: '', variants: '3', compact: false, lens: '', tension: '', bold: 'balanced', full: true, optsOpen: false, chars: [], loras: [] };
 const pick = (v, allowed, d) => (allowed.includes(v) ? v : d);
 function cleanPrefs(p) {
@@ -771,50 +775,73 @@ function cleanMemory(m) {
   if (isObj(m.house)) for (const [k] of HOUSE) if (typeof m.house[k] === 'string') o.house[k] = m.house[k].slice(0, 400);
   if (isObj(m.lessons)) for (const id of TARGET_IDS) { const l = strs(m.lessons[id], 400, 20); if (l.length) o.lessons[id] = l; }
   o.feedback = arr(m.feedback).filter((f) => isObj(f) && TARGET_IDS.has(f.target) && (f.verdict === 'worked' || f.verdict === 'failed')).slice(-200)
-    .map((f, i) => ({ id: str(f.id, 100) || `fb${i}`, ts: +f.ts || 0, target: f.target, verdict: f.verdict, issues: arr(f.issues).filter((x) => ISSUES.includes(x)), note: str(f.note, 400), concept: str(f.concept, 120), ledger: str(f.ledger, 400), learned: f.learned === true }));
+    .map((f, i) => ({ id: safeId(f.id) || `fb${i}`, ts: +f.ts || 0, target: f.target, verdict: f.verdict, issues: arr(f.issues).filter((x) => ISSUES.includes(x)), note: str(f.note, 400), concept: str(f.concept, 120), ledger: str(f.ledger, 400), learned: f.learned === true }));
   o.ledger = strs(m.ledger, 400, 6);
   return o;
 }
 function cleanLibraryItem(x, i) {
   if (!isObj(x) || typeof x.positive !== 'string' || !x.positive.trim()) return null;
-  return { id: str(x.id, 100) || `lib${Date.now()}${i}`, ts: +x.ts || Date.now(), title: str(x.title, 70) || x.positive.slice(0, 70), target: TARGET_IDS.has(x.target) ? x.target : 'tsubaki3',
+  return { id: safeId(x.id) || `lib${Date.now()}${i}`, ts: +x.ts || Date.now(), title: str(x.title, 70) || x.positive.slice(0, 70), target: TARGET_IDS.has(x.target) ? x.target : 'tsubaki3',
     rating: pick(x.rating, ['general', 'sensitive', 'nsfw', 'explicit'], 'general'), concept: str(x.concept, 4000), positive: x.positive.slice(0, 20000), negative: str(x.negative, 20000) };
 }
 const cleanLibrary = (x) => arr(x).map(cleanLibraryItem).filter(Boolean);
 function cleanKit(k) {
   const o = { chars: [], loras: [] };
   if (!isObj(k)) return o;
-  o.chars = arr(k.chars).filter((c) => isObj(c) && str(c.name).trim()).slice(0, 100).map((c, i) => ({ id: str(c.id, 100) || `c${i}`, name: str(c.name, 100), series: str(c.series, 200), identity: str(c.identity, 600), outfit: str(c.outfit, 600), notes: str(c.notes, 600) }));
-  o.loras = arr(k.loras).filter((l) => isObj(l) && str(l.name).trim()).slice(0, 100).map((l, i) => ({ id: str(l.id, 100) || `l${i}`, name: str(l.name, 100), trigger: str(l.trigger, 300), weight: str(String(l.weight ?? ''), 10),
+  o.chars = arr(k.chars).filter((c) => isObj(c) && str(c.name).trim()).slice(0, 100).map((c, i) => ({ id: safeId(c.id) || `c${i}`, name: str(c.name, 100), series: str(c.series, 200), identity: str(c.identity, 600), outfit: str(c.outfit, 600), notes: str(c.notes, 600) }));
+  o.loras = arr(k.loras).filter((l) => isObj(l) && str(l.name).trim()).slice(0, 100).map((l, i) => ({ id: safeId(l.id) || `l${i}`, name: str(l.name, 100), trigger: str(l.trigger, 300), weight: str(String(l.weight ?? ''), 10),
     type: pick(l.type, ['style', 'character', 'concept'], 'style'), base: pick(l.base, ['sdxl', 'dit', 'other'], 'other') }));
   return o;
 }
-function cleanImage(img) { return isObj(img) && typeof img.data === 'string' && /^image\/(jpeg|png|webp|gif)$/.test(img.media_type) ? { media_type: img.media_type, data: img.data } : null; }
+function cleanImage(img) { return isObj(img) && typeof img.data === 'string' && img.data.length > 0 && /^[A-Za-z0-9+/]+=*$/.test(img.data) && /^image\/(jpeg|png|webp|gif)$/.test(img.media_type) ? { media_type: img.media_type, data: img.data } : null; }
+// A stored result is rebuilt field by field; only `raw` (Claude's own content blocks, replayed to the API and never shown) passes through.
+function cleanOut(o) {
+  if (!isObj(o) || typeof o.text !== 'string') return null;
+  const out = { text: o.text.slice(0, 400000), stage: 'done' };
+  if (o.local === true) out.local = true; else if (o.done === true) out.done = true;
+  if (o.x === true || (!out.local && !out.done)) out.x = true; // a result that was still streaming when it was saved
+  if (out.done && Array.isArray(o.raw)) out.raw = o.raw;
+  if (typeof o.note === 'string') out.note = o.note.slice(0, 500);
+  else if (!out.local && !out.done) out.note = 'Interrupted — this result is left out of later requests.';
+  if (o.fb === 'worked' || o.fb === 'failed') { out.fb = o.fb; if (safeId(o.fbId)) out.fbId = o.fbId; }
+  if (isObj(o.usage) && Number.isFinite(+o.usage.in) && Number.isFinite(+o.usage.out)) out.usage = { in: Math.max(0, +o.usage.in), out: Math.max(0, +o.usage.out) };
+  if (isObj(o.critic) && typeof o.critic.text === 'string' && o.critic.text && o.critic.pending !== true) {
+    const c = out.critic = { text: o.critic.text.slice(0, 200000), verdict: pick(o.critic.verdict, ['PASS', 'FIX', 'REJECT'], '') };
+    if (typeof o.critic.pos === 'string' && o.critic.pos.trim()) { c.pos = o.critic.pos.slice(0, 20000); if (typeof o.critic.neg === 'string') c.neg = o.critic.neg.slice(0, 20000); }
+  }
+  if (isObj(o.review) && o.review.pending !== true) {
+    const image = cleanImage(o.review.image);
+    if (image) out.review = { image, verdict: pick(o.review.verdict, ['worked', 'failed'], 'failed'), issues: arr(o.review.issues).filter((x) => ISSUES.includes(x)), kept: strs(o.review.kept, 100, 3), note: str(o.review.note, 240) };
+  }
+  return out;
+}
 function cleanChat(c) {
-  if (!isObj(c) || typeof c.id !== 'string' || !Array.isArray(c.runs)) return null;
+  if (!isObj(c) || !safeId(c.id) || !Array.isArray(c.runs)) return null;
   const runs = c.runs.filter((r) => isObj(r) && isObj(r.meta) && isObj(r.outs) && arr(r.meta.targets).some((t) => TARGET_IDS.has(t))).map((r) => {
-    const meta = { ...cleanPrefs(r.meta), cast: arr(r.meta.cast).filter(isObj), loras: arr(r.meta.loras).filter(isObj) };
+    const k = cleanKit({ chars: r.meta.cast, loras: r.meta.loras });
+    const meta = { ...cleanPrefs(r.meta), cast: k.chars, loras: k.loras };
     const outs = {}, composed = {};
     for (const t of meta.targets) {
-      if (isObj(r.outs[t]) && typeof r.outs[t].text === 'string') outs[t] = { ...r.outs[t], stage: 'done' };
-      if (isObj(r.composed) && typeof r.composed[t] === 'string') composed[t] = r.composed[t];
+      const o = cleanOut(r.outs[t]);
+      if (o) { const b = finalBlocks(o); if (b.pos) o.lint = lint(t, b.pos, b.neg, meta); outs[t] = o; }
+      if (isObj(r.composed) && typeof r.composed[t] === 'string') composed[t] = r.composed[t].slice(0, 500000);
     }
-    return { id: str(r.id, 100) || String(Math.random()), text: str(r.text, 400000), meta, image: cleanImage(r.image), composed, outs, tab: meta.targets.includes(r.tab) ? r.tab : meta.targets[0] };
-  });
+    return { id: safeId(r.id) || uid(), ts: Number.isFinite(+r.ts) ? +r.ts : 0, text: str(r.text, 400000), meta, image: cleanImage(r.image), composed, outs, tab: meta.targets.includes(r.tab) ? r.tab : meta.targets[0] };
+  }).filter((r) => Object.keys(r.outs).length);
   const sys = {};
-  if (isObj(c.sys)) for (const [t, v] of Object.entries(c.sys)) if (TARGET_IDS.has(t) && isObj(v) && BUILDS[v.build] && typeof v.mem === 'string') sys[t] = { build: v.build, mem: v.mem };
+  if (isObj(c.sys)) for (const t of TARGET_IDS) { const v = c.sys[t]; if (isObj(v) && typeof v.build === 'string' && Object.hasOwn(BUILDS, v.build) && typeof v.mem === 'string') sys[t] = { build: v.build, mem: v.mem.slice(0, 20000) }; }
   const fb = {};
-  if (isObj(c.fb)) for (const [t, v] of Object.entries(c.fb)) if (TARGET_IDS.has(t)) fb[t] = strs(v, 1000, 20);
-  return { id: c.id.slice(0, 100), title: str(c.title, 200), updated: +c.updated || 0, runs, sys, fb };
+  if (isObj(c.fb)) for (const t of TARGET_IDS) { const v = strs(c.fb[t], 1000, 20).map((x) => oneLine(x, 1000)); if (v.length) fb[t] = v; }
+  return { id: c.id, title: str(c.title, 200), updated: Number.isFinite(+c.updated) ? +c.updated : 0, runs, sys, fb };
 }
 
 // ---------- persistence ----------
 const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast('Could not save (storage may be full)'); } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { warnStorage(); } },
 };
 const cfg = {}; { const saved = store.get('ruvet.settings', {}); if (isObj(saved)) for (const [k, v] of Object.entries(saved)) if (typeof v === 'string') cfg[k] = v; }
-for (const f of backend.fields) cfg[f.id] ??= f.def ?? '';
+for (const f of backend.fields) { cfg[f.id] ??= f.def ?? ''; if (f.type === 'select' && !f.options.some(([v]) => v === cfg[f.id])) cfg[f.id] = f.def; }
 const prefs = cleanPrefs(store.get('ruvet.prefs', {}));
 const memory = cleanMemory(store.get('ruvet.memory', {}));
 let library = cleanLibrary(store.get('ruvet.library', []));
@@ -841,7 +868,33 @@ async function idb(mode, fn) {
     t.oncomplete = () => res(rq?.result); t.onerror = t.onabort = () => rej(t.error);
   });
 }
-const saveChat = () => { if (!chat.runs.length) return; chat.updated = Date.now(); return idb('readwrite', (s) => s.put(chat)).then(renderChats, () => {}); };
+let storageWarned = false;
+function warnStorage() { if (storageWarned) return; storageWarned = true; setTimeout(() => toast('This browser is not saving RUVET\'s data (storage is full or blocked). Everything works, but it will be gone when the page closes — save a backup from Memory.', 9000), 0); }
+// Another tab may have saved this chat since it was last read here. Read and write in one transaction, and keep
+// any runs the stored copy has that this one lacks, so two tabs on the same chat never erase each other's results.
+const peers = typeof BroadcastChannel === 'function' ? new BroadcastChannel('ruvet') : null;
+async function saveChat() {
+  if (!chat.runs.length) return;
+  const mine = chat;
+  try {
+    const d = await db();
+    const added = await new Promise((res, rej) => {
+      const t = d.transaction('chats', 'readwrite'), st = t.objectStore('chats'), g = st.get(mine.id); let n = 0;
+      g.onsuccess = () => {
+        const stored = cleanChat(g.result);
+        if (stored && stored.updated !== mine.seen) {
+          const have = new Set(mine.runs.map((r) => r.id)), extra = stored.runs.filter((r) => !have.has(r.id));
+          if (extra.length) { n = extra.length; mine.runs = [...extra, ...mine.runs].map((r, i) => [r, i]).sort((a, b) => ((a[0].ts || 0) - (b[0].ts || 0)) || (a[1] - b[1])).map(([r]) => r); }
+        }
+        mine.updated = Date.now(); st.put(mine);
+      };
+      t.oncomplete = () => res(n); t.onerror = t.onabort = () => rej(t.error);
+    });
+    mine.seen = mine.updated;
+    if (added && mine === chat) { renderThread(); toast('This chat was also changed in another tab; both sets of results are kept.', 6000); }
+    renderChats(); peers?.postMessage('chats');
+  } catch { warnStorage(); }
+}
 
 // ---------- state & helpers ----------
 const $ = (id) => document.getElementById(id);
@@ -957,7 +1010,7 @@ function lint(target, pos, neg, meta) {
     const empty = found(['ethereal', 'mesmerizing', 'captivating', 'breathtaking', 'whimsical', 'dreamlike', 'majestic', 'vibrant', 'exquisite', 'gorgeous', 'beautiful', 'masterfully', 'incredibly', 'extremely', 'very', 'perfect']);
     if (empty.length) add('warn', `Words with nothing to draw: ${empty.join(', ')}`, 'bloat');
     const STOP = new Set(['about', 'above', 'across', 'against', 'along', 'around', 'behind', 'below', 'beside', 'between', 'while', 'where', 'which', 'their', 'there', 'these', 'those', 'three', 'through', 'toward', 'towards', 'under', 'light', 'frame', 'slightly', 'almost', 'with', 'from', 'that', 'this', 'into', 'over', 'only', 'left', 'right', 'hand', 'hands']);
-    const freq = {};
+    const freq = Object.create(null);
     for (const w of low.match(/[a-z]{4,}/g) ?? []) if (!STOP.has(w)) freq[w] = (freq[w] ?? 0) + 1;
     const rep = Object.entries(freq).filter(([, n]) => n >= 4).map(([w, n]) => `${w} ×${n}`);
     if (rep.length) add('warn', `Repeated words: ${rep.join(', ')}`, 'bloat');
@@ -970,7 +1023,8 @@ function lint(target, pos, neg, meta) {
     let tagPart = pos, sentences = 0;
     if (pack === 'HYBRID') {
       const cut = pos.search(/\.\s+[A-Z]/);
-      if (cut > 0) { const start = pos.lastIndexOf(',', cut); sentences = (pos.slice(start + 1).match(/[.!?](\s|$)/g) || []).length; tagPart = pos.slice(0, start); }
+      // Tags run up to the first full stop that is followed by a capital; everything after it is the sentences.
+      if (cut > 0) { tagPart = pos.slice(0, cut); sentences = (pos.slice(cut + 1).match(/[.!?](\s|$)/g) || []).length; }
     }
     const tags = tagPart.split(',').map((t) => t.trim()).filter(Boolean);
     count = `${tags.length} tags` + (sentences ? ` + ${sentences} sentences` : '');
@@ -1016,31 +1070,33 @@ function lint(target, pos, neg, meta) {
 }
 
 window.RUVET_LINT = lint; // exposed for tests
+// Internals for the fuzz tests; nothing in the app reads this.
+window.RUVET_TEST = { verdictOf, parseMd, extractBlocks, parseJSON, lint, oneLine, esc, cleanChat, cleanPrefs, cleanMemory, cleanKit, cleanLibrary, memoryBlock: (t) => memoryBlock(t), splitPasted: (t) => splitPasted(t), readPngPrompt: (f) => readPngPrompt(f), restoreData: (d) => restoreData(d), openChat: (id) => openChat(id), setView: (v) => setView(v), state: () => ({ chat, memory, library, kit, prefs }) };
 
 // ---------- memory: what earlier sessions taught, frozen into each chat when it starts ----------
 function memoryBlock(target) {
   const parts = [];
   const hs = HOUSE.map(([k]) => [k, (memory.house[k] || '').trim()]).filter(([, v]) => v);
-  if (hs.length) parts.push(`<house_style>\n${hs.map(([k, v]) => `${k}: ${v}`).join('\n')}\n</house_style>`);
+  if (hs.length) parts.push(`<house_style>\n${hs.map(([k, v]) => `${k}: ${oneLine(v)}`).join('\n')}\n</house_style>`);
   const lessons = memory.lessons[target] ?? [];
   const results = memory.feedback.filter((f) => f.target === target).slice(-8);
   const ledger = memory.ledger.slice(-3);
   if (lessons.length || results.length || ledger.length) {
     const m = [`<memory>`, `model: ${target}`];
-    if (lessons.length) m.push('lessons:', ...lessons.map((l) => `- ${l}`));
+    if (lessons.length) m.push('lessons:', ...lessons.map((l) => `- ${oneLine(l)}`));
     if (results.length) m.push('results:', ...results.map(resultLine));
-    if (ledger.length) m.push('ledger:', ...ledger);
+    if (ledger.length) m.push('ledger:', ...ledger.map((l) => oneLine(l)));
     m.push('</memory>'); parts.push(m.join('\n'));
   }
   return parts.length ? '\n' + parts.join('\n') + '\n' : '';
 }
 function resultLine(f) {
-  return `- ${f.verdict}${f.issues?.length ? ` (${f.issues.join(', ')})` : ''}${f.note ? ` — ${f.note}` : ''}${f.ledger ? ` | ${f.ledger}` : ''}`;
+  return `- ${f.verdict}${f.issues?.length ? ` (${f.issues.join(', ')})` : ''}${f.note ? ` — ${oneLine(f.note, 240)}` : ''}${f.ledger ? ` | ${oneLine(f.ledger)}` : ''}`;
 }
 function harvestLedger(text) {
   const lines = [...text.matchAll(/(?:Ledger|Defter):\**\s*(L\s*\|[^\n]+)/g)].map((m) => m[1].trim());
   if (!lines.length) return;
-  for (const l of lines) { memory.ledger = memory.ledger.filter((x) => x !== l); memory.ledger.push(l); }
+  for (const raw of lines) { const l = oneLine(raw); if (!l) continue; memory.ledger = memory.ledger.filter((x) => x !== l); memory.ledger.push(l); }
   memory.ledger = memory.ledger.slice(-6); saveMemory();
 }
 const lastLedger = (text) => [...text.matchAll(/(?:Ledger|Defter):\**\s*(L\s*\|[^\n]+)/g)].map((m) => m[1].trim()).pop() ?? '';
@@ -1068,7 +1124,7 @@ function compose(text, meta, target, hasImage, notes) {
   if (meta.cast?.length) head.push(`characters: ${JSON.stringify(meta.cast.map(({ name, series, identity, outfit, notes }) => ({ name, series, identity, outfit, notes })))}`);
   if (meta.loras?.length) head.push(`loras: ${JSON.stringify(meta.loras.map(({ name, trigger, weight, type, base }) => ({ name, trigger, weight: +weight || 1, type, base })))}`);
   if (hasImage) head.push('image: attached to this message');
-  for (const n of notes) head.push(`feedback: ${n}`);
+  for (const n of notes) head.push(`feedback: ${oneLine(n, 6000)}`);
   return `${head.join('\n')}\n\n${text}`.trim();
 }
 // What the next request should know about the last result for this target: a critic correction, a render report.
@@ -1121,11 +1177,15 @@ async function pipeline(run, target) {
   out.stage = 'done'; paint(run);
 }
 const addUsage = (out, u) => { if (u) out.usage = { in: (out.usage?.in ?? 0) + u.in, out: (out.usage?.out ?? 0) + u.out }; };
+function verdictOf(text) {
+  // Bounded gap between the label and the word: an unbounded \s*\**\s* here took minutes on a long run of spaces.
+  const v = (text.match(/(?:Verdict|Karar)[\s:*]{0,12}(PASS|FIX|REJECT|GEÇTİ|DÜZELT|REDDET)/i)?.[1] ?? '').toUpperCase();
+  return { 'GEÇTİ': 'PASS', 'DÜZELT': 'FIX', 'REDDET': 'REJECT' }[v] ?? v;
+}
 async function audit(target, text, onText) {
   const res = await ask({ system: await backend.loadPart('critic'), turns: [{ role: 'user', text: `Target model: ${target}\n\nSAPPHIRE output to audit:\n\n${text}` }], onText });
   const c = { text: res.text, usage: res.usage };
-  c.verdict = (res.text.match(/(?:Verdict|Karar):?\**:?\s*\**\s*(PASS|FIX|REJECT|GEÇTİ|DÜZELT|REDDET)/i)?.[1] ?? '').toUpperCase();
-  c.verdict = { 'GEÇTİ': 'PASS', 'DÜZELT': 'FIX', 'REDDET': 'REJECT' }[c.verdict] ?? c.verdict;
+  c.verdict = verdictOf(res.text);
   if (c.verdict === 'FIX') { const fixed = extractBlocks(res.text); if (fixed.pos[0]) { c.pos = fixed.pos[0]; c.neg = fixed.neg[0]; } }
   return c;
 }
@@ -1139,16 +1199,17 @@ async function critic(run, target, out) {
 // `over` runs a request the app composed itself (e.g. a repair from a render review) without touching the composer.
 async function send(over) {
   // The send button is also the stop button; a second tap within a moment of starting is a double tap, not a stop.
-  if (running) { if (!over && Date.now() - startedAt > 800) ctl?.abort(); return; }
+  if (running) { if (over) toast('Stop the current run first'); else if (Date.now() - startedAt > 800) ctl?.abort(); return; }
   const input = $('input'), text = over?.text ?? input.value.trim(), image = over ? over.image : pendingImage;
   if (!text && !image) return;
   const need = backend.needs(cfg);
   if (need) { openSettings(); toast(need); return; }
   const meta = { ...prefs, targets: [...prefs.targets], ...over?.meta };
-  meta.cast = kit.chars.filter((c) => prefs.chars.includes(c.id)); meta.loras = kit.loras.filter((l) => prefs.loras.includes(l.id));
-  const run = { id: uid(), text, meta, image, composed: {}, outs: {}, tab: meta.targets[0] };
+  meta.cast = over?.meta?.cast ?? kit.chars.filter((c) => prefs.chars.includes(c.id)); meta.loras = over?.meta?.loras ?? kit.loras.filter((l) => prefs.loras.includes(l.id));
+  const run = { id: uid(), ts: Date.now(), text, meta, image, composed: {}, outs: {}, tab: meta.targets[0] };
   for (const t of meta.targets) run.composed[t] = compose(text, meta, t, !!image, notesFor(t));
-  const fbBefore = chat.fb; chat.fb = {};
+  // Queued render feedback is consumed only for the targets this run addresses.
+  const fbBefore = { ...chat.fb }; chat.fb = { ...chat.fb }; for (const t of meta.targets) delete chat.fb[t];
   chat.runs.push(run); chat.title ||= (text || 'Image').slice(0, 60);
   if (!over) { input.value = ''; autosize(); setImage(null); $('sparks').hidden = true; }
   running = true; startedAt = Date.now(); ctl = new AbortController(); setBusy(true); renderThread();
@@ -1158,6 +1219,7 @@ async function send(over) {
     // Nothing usable came back: roll the run back and return the text to the composer.
     chat.runs.pop(); chat.fb = fbBefore; if (!over) { input.value = text; autosize(); setImage(image); }
   }
+  else if (!run.outs[run.tab]) run.tab = Object.keys(run.outs)[0]; // the first model failed: show one that answered
   renderThread(); saveChat();
 }
 async function runCritic(run, target) {
@@ -1172,12 +1234,14 @@ async function runCritic(run, target) {
 // ---------- learning ----------
 function recordFeedback(run, target, verdict, issues, note) {
   const out = run.outs[target];
-  out.fb = verdict;
-  memory.feedback.push({ id: uid(), ts: Date.now(), target, verdict, issues, note, concept: run.text.slice(0, 120), ledger: lastLedger(out.text) });
+  // A result has one verdict: marking it again (or reviewing it after marking) replaces the earlier entry.
+  if (out.fbId) memory.feedback = memory.feedback.filter((f) => f.id !== out.fbId);
+  out.fb = verdict; out.fbId = uid();
+  memory.feedback.push({ id: out.fbId, ts: Date.now(), target, verdict, issues, note, concept: run.text.slice(0, 120), ledger: lastLedger(out.text) });
   memory.feedback = memory.feedback.slice(-200); saveMemory();
   if (run === chat.runs.at(-1)) {
-    chat.fb ??= {}; (chat.fb[target] ??= []).push(verdict === 'worked' ? 'the previous output rendered well; keep what made it work'
-      : `the previous output failed on render${issues.length ? `: ${issues.join(', ')}` : ''}${note ? ` — ${note}` : ''}`);
+    chat.fb ??= {}; chat.fb[target] = []; chat.fb[target].push(verdict === 'worked' ? 'the previous output rendered well; keep what made it work'
+      : `the previous output failed on render${issues.length ? `: ${issues.join(', ')}` : ''}${note ? ` — ${oneLine(note, 400)}` : ''}`);
   }
   saveChat(); renderNav();
   toast(`Noted — RUVET will use this for ${targetInfo(target).label}`);
@@ -1189,7 +1253,7 @@ async function learnLessons(target) {
   if (!res) return;
   const list = parseJSON(res);
   if (!Array.isArray(list)) throw new Error('not a list');
-  memory.lessons[target] = list.map(String).filter(Boolean).slice(0, 8);
+  memory.lessons[target] = list.filter((x) => typeof x === 'string').map((x) => oneLine(x)).filter(Boolean).slice(0, 8);
   for (const f of memory.feedback) if (f.target === target) f.learned = true;
   saveMemory(); toast(`${memory.lessons[target].length} lessons for ${targetInfo(target).label}`);
 }
@@ -1198,7 +1262,8 @@ async function learnStyle() {
   const res = await helper(HELPERS.style, library.slice(0, 30).map((x, i) => `${i + 1}. ${x.positive}`).join('\n\n'));
   if (!res) return;
   const s = parseJSON(res);
-  for (const [k] of HOUSE) if (typeof s[k] === 'string' && s[k].trim()) memory.house[k] = s[k].trim();
+  if (!isObj(s)) throw new Error('not an object');
+  for (const [k] of HOUSE) if (typeof s[k] === 'string' && s[k].trim()) memory.house[k] = oneLine(s[k]);
   saveMemory(); toast('House style updated from your library');
 }
 async function helper(system, text, opts = {}) {
@@ -1213,13 +1278,15 @@ async function helper(system, text, opts = {}) {
 // Render review: Claude looks at the rendered image next to the prompt, and the verdict goes into memory by itself.
 async function reviewRender(run, target, image) {
   const out = run.outs[target], b = finalBlocks(out);
+  if (!chat.runs.includes(run)) return toast('That result is no longer open');
+  const earlier = out.review;
   out.review = { pending: true, image }; paint(run);
   const res = await helper(HELPERS.review, `Target model: ${target}\n\nPositive prompt:\n${b.pos}\n\nNegative prompt:\n${b.neg || '(none)'}\n\nThe attached image is the render.`, { image, quick: false });
   let r = null;
   try { r = res && parseJSON(res); } catch { /* handled below */ }
-  if (!r || typeof r !== 'object') { delete out.review; paint(run); if (res) toast('Could not read the review; try again'); return; }
+  if (!isObj(r)) { if (earlier && !earlier.pending) out.review = earlier; else delete out.review; paint(run); if (res) toast('Could not read the review; try again'); return; }
   out.review = { image, verdict: r.verdict === 'worked' ? 'worked' : 'failed', issues: (Array.isArray(r.issues) ? r.issues : []).filter((i) => ISSUES.includes(i)),
-    kept: (Array.isArray(r.kept) ? r.kept : []).map(String).slice(0, 3), note: String(r.note ?? '').slice(0, 240) };
+    kept: strs(r.kept, 100, 3), note: typeof r.note === 'string' ? r.note.slice(0, 240) : '' };
   recordFeedback(run, target, out.review.verdict, out.review.issues, out.review.note);
   paint(run);
 }
@@ -1238,12 +1305,12 @@ async function spark() {
 const thread = $('thread');
 function pipeHTML(run, target, out) {
   const b = finalBlocks(out), st = [];
-  st.push(out.local ? ['Local check · no Claude call', 'ok'] : ['Compile', out.done ? 'ok' : out.x ? 'err' : 'run']);
+  st.push(out.local ? ['Local check · no Claude call', 'ok'] : ['Compile', out.done ? 'ok' : out.x ? 'err' : 'going']);
   if (b.pos) {
     const errs = out.lint?.items.filter((i) => i.lv === 'error').length ?? 0, warns = out.lint?.items.filter((i) => i.lv === 'warn').length ?? 0;
     st.push([errs ? `Lint · ${errs} error${errs > 1 ? 's' : ''}` : warns ? `Lint · ${warns} warning${warns > 1 ? 's' : ''}` : 'Lint · clean', errs ? 'err' : warns ? 'warn' : 'ok']);
     const c = out.critic;
-    if (c?.pending) st.push(['Critic', 'run']);
+    if (c?.pending) st.push(['Critic', 'going']);
     else if (c) st.push([`Critic · ${c.verdict || 'done'}`, c.verdict === 'PASS' ? 'ok' : c.verdict === 'REJECT' ? 'err' : 'warn']);
     else if (run.meta.full && out.stage !== 'done') st.push(['Critic', '']);
     if (c?.pos) st.push(['Fix applied', 'ok']);
@@ -1261,23 +1328,23 @@ function outHTML(run, target) {
     if (risk) pills.push(`<span class="pill ${+risk[1] <= 5 ? 'good' : +risk[1] <= 7 ? 'mid' : 'bad'}">risk ${risk[1]} · ${esc(risk[2])}</span>`);
     if (out.lint) {
       const bad = (cat) => out.lint.items.filter((i) => i.cat === cat && i.lv !== 'info').length, d = bad('dialect'), bl = bad('bloat');
-      pills.push(`<span class="pill">${out.lint.count}</span>`, `<span class="pill ${d ? 'bad' : 'good'}">${d ? `dialect · ${d} issue${d > 1 ? 's' : ''}` : 'dialect clean'}</span>`, `<span class="pill ${bl ? 'mid' : 'good'}">${bl ? `bloat · ${bl}` : 'lean'}</span>`);
+      pills.push(`<span class="pill">${esc(out.lint.count)}</span>`, `<span class="pill ${d ? 'bad' : 'good'}">${d ? `dialect · ${d} issue${d > 1 ? 's' : ''}` : 'dialect clean'}</span>`, `<span class="pill ${bl ? 'mid' : 'good'}">${bl ? `bloat · ${bl}` : 'lean'}</span>`);
     }
     if (b.count > 1) pills.push(`<span class="pill">${b.count} variants</span>`);
     if (out.usage) pills.push(`<span class="pill" title="Claude tokens for this result">${kfmt(out.usage.in)} in · ${kfmt(out.usage.out)} out</span>`);
-    if (out.fb) pills.push(`<span class="pill ${out.fb === 'worked' ? 'good' : 'bad'}">${out.fb}</span>`);
+    if (out.fb) pills.push(`<span class="pill ${out.fb === 'worked' ? 'good' : 'bad'}">${esc(out.fb)}</span>`);
     h.push(`<div class="sum">${pills.join('')}</div>`);
     // On a phone the full action row sits below a long report; the two actions used most also sit here, by the prompt.
-    if (done) h.push('<div class="quick"><button class="btn primary" data-act="qcopy">Copy prompt</button><label class="btn" for="reviewFile" role="button" data-act="qreview"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>Review render</label></div>');
+    if (done) h.push('<div class="quick"><button class="btn primary" data-act="qcopy">Copy prompt</button><label class="btn" for="reviewFile" role="button" tabindex="0" data-act="qreview"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>Review render</label></div>');
   }
   if (b.fixed) h.push(`<div class="final"><h4>Final prompt — corrected by the critic</h4>${codeBlock(b.pos, 'pos')}${b.neg ? codeBlock(b.neg, 'neg') : ''}</div>`);
   h.push(b.fixed ? `<details class="sec"><summary>Original report</summary><div class="md">${md(out.text)}</div></details>` : `<div class="md">${md(out.text)}</div>`);
-  if (out.critic?.text) h.push(`<details class="sec"${out.critic.pending ? ' open' : ''}><summary>Critic findings${out.critic.verdict ? ` — ${out.critic.verdict}` : ''}</summary><div class="md">${md(out.critic.text)}</div></details>`);
-  if (out.lint?.items.length) h.push(`<details class="sec" open><summary>Lint</summary><ul class="lint">${out.lint.items.map((i) => `<li class="${i.lv}">${esc(i.m)}</li>`).join('')}</ul>${done && out.lint.items.some((i) => i.lv !== 'info') ? '<div class="actions"><button class="btn" data-act="fixlint">Fix these findings</button></div>' : ''}</details>`);
+  if (out.critic?.text) h.push(`<details class="sec"${out.critic.pending ? ' open' : ''}><summary>Critic findings${out.critic.verdict ? ` — ${esc(out.critic.verdict)}` : ''}</summary><div class="md">${md(out.critic.text)}</div></details>`);
+  if (out.lint?.items.length) h.push(`<details class="sec" open><summary>Lint</summary><ul class="lint">${out.lint.items.map((i) => `<li class="${esc(i.lv)}">${esc(i.m)}</li>`).join('')}</ul>${done && out.lint.items.some((i) => i.lv !== 'info') ? '<div class="actions"><button class="btn" data-act="fixlint">Fix these findings</button></div>' : ''}</details>`);
   if (out.review) {
     const v = out.review;
     h.push(`<div class="review"><img alt="Reviewed render" src="data:${v.image.media_type};base64,${v.image.data}"><div>` + (v.pending ? '<span class="dots"><i></i><i></i><i></i>Looking at the render…</span>'
-      : `<h4>Render review <span class="pill ${v.verdict === 'worked' ? 'good' : 'bad'}">${v.verdict}</span></h4>`
+      : `<h4>Render review <span class="pill ${v.verdict === 'worked' ? 'good' : 'bad'}">${esc(v.verdict)}</span></h4>`
         + (v.issues.length ? `<p><strong>Broke:</strong> ${esc(v.issues.join(', '))}</p>` : '') + (v.kept.length ? `<p><strong>Held up:</strong> ${esc(v.kept.join(', '))}</p>` : '') + (v.note ? `<p>${esc(v.note)}</p>` : '')
         + (v.verdict === 'failed' ? '<div class="actions"><button class="btn primary" data-act="rrepair">Repair with this render</button></div>' : '')) + '</div></div>');
   }
@@ -1286,13 +1353,13 @@ function outHTML(run, target) {
     h.push(`<div class="actions"><button class="btn primary" data-act="copyp">Copy prompt</button>${b.neg ? '<button class="btn" data-act="copyn">Copy negative</button>' : ''}`
       + `<button class="btn" data-act="save">Save</button>`
       + (out.done && !out.critic ? '<button class="btn" data-act="critic">Run critic</button>' : '')
-      + '<label class="btn" for="reviewFile" role="button" data-act="review">Review render</label>'
+      + '<label class="btn" for="reviewFile" role="button" tabindex="0" data-act="review">Review render</label>'
       + `<button class="btn ${out.fb === 'worked' ? 'on' : ''}" data-act="worked">Worked</button><button class="btn ${out.fb === 'failed' ? 'off' : ''}" data-act="failed">Failed</button></div>`);
     if (run.fbOpen === target) {
       const d = run.fbDraft ?? { issues: [] };
       h.push(`<div class="fb"><p>What went wrong in the render? RUVET remembers this for ${esc(targetInfo(target).label)}.</p>
         <div class="chips wrap">${ISSUES.map((i) => `<button class="chip" data-issue="${i}" aria-pressed="${d.issues.includes(i)}">${i}</button>`).join('')}</div>
-        <div class="rowx"><input id="fbNote" placeholder="Anything else? (optional)" value="${esc(d.note ?? '')}"></div>
+        <div class="rowx"><input id="fbNote" aria-label="Note about the render" placeholder="Anything else? (optional)" value="${esc(d.note ?? '')}"></div>
         <div class="rowx"><button class="btn primary" data-act="fbrepair">Save and repair</button><button class="btn" data-act="fbsave">Save only</button><button class="btn" data-act="fbcancel">Cancel</button></div></div>`);
     }
   } else if (done && out.text) h.push('<div class="actions"><button class="btn" data-act="copyall">Copy</button></div>');
@@ -1308,6 +1375,7 @@ function runHTML(run, i) {
     + `<div class="card${out?.x ? ' x' : ''}">${outHTML(run, tab)}</div></div>`;
 }
 function renderThread() {
+  dirty.clear(); // a full render supersedes any queued repaint, which would otherwise replace a card the user has just focused
   if (!chat.runs.length) {
     const need = backend.needs(cfg);
     thread.innerHTML = `<div class="empty">${GEM}<h2>One idea in, a render-ready prompt out</h2>
@@ -1335,20 +1403,27 @@ function paint(run) {
     if (stick) thread.scrollTop = thread.scrollHeight;
   });
 }
-function setBusy(b) { document.body.classList.toggle('busy', b); $('sendBtn').setAttribute('aria-label', b ? 'Stop' : 'Send'); }
+function setBusy(b) { document.body.classList.toggle('busy', b); $('sendBtn').setAttribute('aria-label', b ? 'Stop' : 'Send'); thread.setAttribute('aria-busy', b); }
 
 // ---------- local check: lint a pasted prompt, no Claude call ----------
 function splitPasted(text) {
-  const t = text.replace(/^\s*(positive( prompt)?|prompt( \d+)?)\s*:\s*/i, '');
-  const m = t.split(/\n\s*negative( prompt)?\s*:\s*/i);
-  const neg = (m[2] ?? '').split(/\n\s*settings\s*:/i)[0];
-  return { pos: m[0].split(/\n\s*settings\s*:/i)[0].trim(), neg: neg.trim() };
+  // Line by line, each label anchored at the start of its line: linear time whatever is pasted.
+  const part = { pos: [], neg: [] }; let cur = 'pos', started = false;
+  for (let line of text.split('\n')) {
+    const m = line.match(/^\s{0,40}(positive(?: prompt)?|prompt(?: \d{1,3})?|negative(?: prompt)?|settings)\s{0,10}:\s?/i), k = m?.[1].toLowerCase() ?? '';
+    if (k === 'settings') break;
+    if (k.startsWith('neg') && cur === 'pos') { cur = 'neg'; line = line.slice(m[0].length); }
+    else if (k && !k.startsWith('neg') && !started) line = line.slice(m[0].length);
+    if (line.trim()) started = true;
+    part[cur].push(line);
+  }
+  return { pos: part.pos.join('\n').trim(), neg: part.neg.join('\n').trim() };
 }
 function localCheck() {
   if (running) return toast('Stop the current run first');
   const text = $('input').value.trim(); if (!text) return toast('Paste a prompt to check');
   const { pos, neg } = splitPasted(text), meta = { ...prefs, targets: [...prefs.targets], cast: [], loras: kit.loras.filter((l) => prefs.loras.includes(l.id)) };
-  const run = { id: uid(), text, meta: { ...meta, full: false }, image: null, composed: {}, outs: {}, tab: meta.targets[0] };
+  const run = { id: uid(), ts: Date.now(), text, meta: { ...meta, full: false }, image: null, composed: {}, outs: {}, tab: meta.targets[0] };
   for (const t of meta.targets) {
     const L = lint(t, pos, neg, meta);
     run.outs[t] = { local: true, stage: 'done', lint: L, text: `### Local check — ${targetInfo(t).label}\n${L.items.length ? `${L.items.length} finding${L.items.length > 1 ? 's' : ''}; ${L.count}.` : `No findings; ${L.count}.`}\n#### 🟢 Positive\n\`\`\`text\n${pos}\n\`\`\`\n${neg ? `#### 🔴 Negative\n\`\`\`text\n${neg}\n\`\`\`\n` : ''}` };
@@ -1441,7 +1516,7 @@ function renderTest() {
   const ideas = benchIdeas(), targets = benchTargets(), calls = ideas.length * targets.length * (bench.critic ? 2 : 1), live = bench.live;
   $('test').innerHTML = `<h2>Test bench</h2><p class="lead">Runs the same ideas through the pipeline and measures the prompts: length, dialect and bloat findings, critic verdicts, risk and tokens. Run it before and after a prompt change to see whether the change helped. Results stay on this device; nothing is saved to your chats or memory.</p>
     <div class="panel"><h3>Set-up</h3>
-      <div class="field">Ideas — one per line, up to 20<textarea id="benchIdeas" rows="6">${esc(bench.ideas)}</textarea></div>
+      <label class="field">Ideas — one per line, up to 20<textarea id="benchIdeas" rows="6">${esc(bench.ideas)}</textarea></label>
       <div class="lbl" style="margin-top:10px">Models</div><div class="chips wrap" id="benchTargets">${TARGETS.map((t) => `<button class="chip" data-bt="${t.id}" aria-pressed="${targets.includes(t.id)}">${esc(t.label)}</button>`).join('')}</div>
       <div class="chips wrap" style="margin-top:8px"><button class="chip alt" data-bo="critic" aria-pressed="${bench.critic}">critic + auto-fix</button><button class="chip alt" data-bo="memory" aria-pressed="${bench.memory}">include my memory</button></div>
       <div class="rowx"><button class="btn primary" data-b="run" ${running ? 'disabled' : ''}>${armed.has('bench') ? `Run ${calls} Claude calls? Tap again` : `Run test — ${calls} Claude calls`}</button>${running && live ? '<button class="btn danger" data-b="stop">Stop</button>' : ''}<button class="btn" data-b="reset">Restore the default ideas</button></div>
@@ -1449,7 +1524,7 @@ function renderTest() {
     ${live ? `<div class="panel"><h3>Running <span class="pill">${live.cases.length}/${live.total}</span></h3><div class="bar-p"><i style="width:${(100 * live.cases.length) / live.total}%"></i></div>${live.cases.length ? summaryTable(live) : ''}</div>` : ''}
     ${bench.runs.map((r, i) => `<div class="panel"><h3>${new Date(r.ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })} <span class="pill">${r.cases.length} cases</span>${r.memory ? '<span class="pill">with memory</span>' : ''}</h3>
       ${summaryTable(r)}
-      <details class="sec"><summary>Every case</summary>${r.cases.map((c) => `<div class="case"><div><strong>${esc(targetInfo(c.target).label)}</strong> · ${esc(c.idea)} ${c.verdict ? `<span class="pill">${c.verdict}${c.fixed ? ' · fixed' : ''}</span>` : ''}${c.error ? `<span class="pill bad">${esc(c.error)}</span>` : ''}</div>${c.pos ? `<div class="mono">${esc(c.pos)}</div>` : ''}${c.findings.length ? `<ul class="lint">${c.findings.map((m) => `<li class="warn">${esc(m)}</li>`).join('')}</ul>` : ''}</div>`).join('')}</details>
+      <details class="sec"><summary>Every case</summary>${r.cases.map((c) => `<div class="case"><div><strong>${esc(targetInfo(c.target).label)}</strong> · ${esc(c.idea)} ${c.verdict ? `<span class="pill">${esc(c.verdict)}${c.fixed ? ' · fixed' : ''}</span>` : ''}${c.error ? `<span class="pill bad">${esc(c.error)}</span>` : ''}</div>${c.pos ? `<div class="mono">${esc(c.pos)}</div>` : ''}${c.findings.length ? `<ul class="lint">${c.findings.map((m) => `<li class="warn">${esc(m)}</li>`).join('')}</ul>` : ''}</div>`).join('')}</details>
       <div class="actions"><button class="btn" data-b="copy" data-i="${i}">Copy results as JSON</button><button class="btn ${armed.has('brun' + i) ? 'danger' : ''}" data-b="del" data-i="${i}">${armed.has('brun' + i) ? 'Delete?' : 'Delete'}</button></div></div>`).join('')
       || '<p class="none">No test runs yet. A run of the default set on one model with the critic on is 16 Claude calls.</p>'}`;
 }
@@ -1480,14 +1555,14 @@ function renderLibrary() {
   const items = library.filter((x) => (!libTarget || x.target === libTarget) && (!q || (x.title + ' ' + x.positive).toLowerCase().includes(q)));
   const used = [...new Set(library.map((x) => x.target))];
   $('library').innerHTML = `<h2>Library</h2><p class="lead">Prompts you kept. RUVET can also learn your house style from them (Memory tab).</p>
-    <div class="toolbar"><input id="libQ" placeholder="Search saved prompts" value="${esc(libQuery)}">
+    <div class="toolbar"><input id="libQ" aria-label="Search saved prompts" placeholder="Search saved prompts" value="${esc(libQuery)}">
       <select id="libT" aria-label="Model"><option value="">All models</option>${used.map((t) => `<option value="${t}"${t === libTarget ? ' selected' : ''}>${esc(targetInfo(t).label)}</option>`).join('')}</select>
       <button class="btn" data-l="export">Copy all as JSON</button><button class="btn" data-l="import">Import</button></div>
     <div id="libImport" hidden class="panel"><div class="field">Paste a JSON export<textarea id="libJson" rows="4"></textarea></div><div class="rowx"><button class="btn primary" data-l="doimport">Add to library</button></div></div>
     <div id="libList">${libraryList(items)}</div>`;
 }
 function libraryList(items) {
-  return items.length ? items.map((x) => `<div class="panel item" data-id="${x.id}"><h3>${esc(x.title)}</h3>
+  return items.length ? items.map((x) => `<div class="panel item" data-id="${esc(x.id)}"><h3>${esc(x.title)}</h3>
       <div class="meta"><span class="pill">${esc(targetInfo(x.target).label)}</span><span class="pill">${esc(x.rating)}</span><span class="pill">${new Date(x.ts).toLocaleDateString()}</span></div>
       ${codeBlock(x.positive, 'pos').replace('<button data-save>Save</button>', '')}${x.negative ? codeBlock(x.negative, 'neg') : ''}
       <div class="actions"><button class="btn" data-l="remix">Remix as variants</button><button class="btn ${armed.has('lib' + x.id) ? 'danger' : ''}" data-l="del">${armed.has('lib' + x.id) ? 'Delete?' : 'Delete'}</button></div></div>`).join('')
@@ -1506,9 +1581,9 @@ function renderMemory() {
       return `<div class="panel" data-target="${t.id}"><h3>${esc(t.label)} <span class="pill">${fb.filter((f) => f.verdict === 'worked').length} worked</span><span class="pill">${fb.filter((f) => f.verdict === 'failed').length} failed</span></h3>
         <p class="hint">Lessons are standing rules for this model. Recent results are sent as they are; "Learn" condenses them into lessons.</p>
         <ul class="lessons">${ls.map((l, i) => `<li><span>${esc(l)}</span><button class="x" data-m="dellesson" data-i="${i}" aria-label="Remove lesson">×</button></li>`).join('') || '<li><span class="none" style="padding:4px 0;text-align:left">No lessons yet.</span></li>'}</ul>
-        <div class="rowx"><input data-newlesson placeholder="Add a rule yourself, e.g. keep both hands parked in full-body shots" style="flex:1 1 220px;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:16px"><button class="btn" data-m="addlesson">Add</button>
+        <div class="rowx"><input data-newlesson aria-label="New lesson" placeholder="Add a rule yourself, e.g. keep both hands parked in full-body shots" style="flex:1 1 220px;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:16px"><button class="btn" data-m="addlesson">Add</button>
           <button class="btn ${n ? 'primary' : ''}" data-m="learn" ${fb.length ? '' : 'disabled'}>Learn from results${n ? ` (${n} new)` : ''}</button></div>
-        <details class="sec"><summary>Recent results (${fb.length})</summary><ul class="lessons">${fb.slice(-12).reverse().map((f) => `<li><span>${esc(f.verdict)}${f.issues?.length ? ` — ${esc(f.issues.join(', '))}` : ''}${f.note ? ` — ${esc(f.note)}` : ''}<small>${esc(f.concept || '')}</small></span><button class="x" data-m="delfb" data-id="${f.id}" aria-label="Remove result">×</button></li>`).join('')}</ul></details></div>`;
+        <details class="sec"><summary>Recent results (${fb.length})</summary><ul class="lessons">${fb.slice(-12).reverse().map((f) => `<li><span>${esc(f.verdict)}${f.issues?.length ? ` — ${esc(f.issues.join(', '))}` : ''}${f.note ? ` — ${esc(f.note)}` : ''}<small>${esc(f.concept || '')}</small></span><button class="x" data-m="delfb" data-id="${esc(f.id)}" aria-label="Remove result">×</button></li>`).join('')}</ul></details></div>`;
     }).join('') || '<div class="panel"><h3>Model lessons</h3><p class="hint" style="margin:0">Nothing yet. After you render a prompt, mark the result Worked or Failed in the Studio — RUVET keeps what it learns per model.</p></div>'}
     <div class="panel"><h3>Diversity ledger</h3><p class="hint">The last compositions RUVET produced. New chats avoid repeating their lens, light, palette and staging.</p>
       ${memory.ledger.length ? `<ul class="lessons">${memory.ledger.slice().reverse().map((l) => `<li><span class="mono">${esc(l)}</span></li>`).join('')}</ul><div class="rowx"><button class="btn" data-m="clearledger">${armed.has('ledger') ? 'Clear?' : 'Clear ledger'}</button></div>` : '<p class="hint" style="margin:0">Empty.</p>'}</div>
@@ -1525,7 +1600,7 @@ function renderKit() {
     return `<div class="fields" data-form="${kind}">${fields.map(([k, l, p]) => `<label class="field">${l}<input data-k="${k}" placeholder="${p}" value="${esc(cur[k] ?? '')}"></label>`).join('')}${extra(cur)}</div>
       <div class="rowx"><button class="btn primary" data-kit="save" data-kind="${kind}">${kitEdit[kind] ? 'Save changes' : 'Add'}</button>${kitEdit[kind] ? `<button class="btn" data-kit="cancel" data-kind="${kind}">Cancel</button>` : ''}</div>`; };
   const list = (kind, line) => kit[kind].length ? `<ul class="lessons">${kit[kind].map((x) => `<li><span><strong>${esc(x.name)}</strong><small>${esc(line(x))}</small></span>
-      <button class="btn" data-kit="edit" data-kind="${kind}" data-id="${x.id}">Edit</button><button class="x ${armed.has(kind + x.id) ? 'sure' : ''}" data-kit="del" data-kind="${kind}" data-id="${x.id}" aria-label="Delete">${armed.has(kind + x.id) ? 'Delete?' : '×'}</button></li>`).join('')}</ul>` : '';
+      <button class="btn" data-kit="edit" data-kind="${kind}" data-id="${esc(x.id)}">Edit</button><button class="x ${armed.has(kind + x.id) ? 'sure' : ''}" data-kit="del" data-kind="${kind}" data-id="${esc(x.id)}" aria-label="Delete">${armed.has(kind + x.id) ? 'Delete?' : '×'}</button></li>`).join('')}</ul>` : '';
   const sel = (k, cur, opts) => `<label class="field">${k[0].toUpperCase() + k.slice(1)}<select data-k="${k}">${opts.map((o) => `<option${cur[k] === o ? ' selected' : ''}>${o}</option>`).join('')}</select></label>`;
   $('kit').innerHTML = `<h2>Kit</h2><p class="lead">Characters and LoRAs you reuse. Pick them per request under the options in the Studio; RUVET keeps their details exact.</p>
     <div class="panel"><h3>Characters</h3><p class="hint">Recurring characters keep the same identity in every prompt.</p>${list('chars', (c) => [c.series, c.identity, c.outfit].filter(Boolean).join(' · '))}${form('chars', CHAR_F, () => '')}</div>
@@ -1556,7 +1631,12 @@ async function makeBackup() {
 }
 async function restoreBackup(file) {
   let d; try { d = JSON.parse(await file.text()); } catch { return toast('That file is not a RUVET backup'); }
-  if (d?.app !== 'RUVET.' || !Array.isArray(d.chats)) return toast('That file is not a RUVET backup');
+  return restoreData(d);
+}
+async function restoreData(d) {
+  if (!isObj(d) || d.app !== 'RUVET.' || !Array.isArray(d.chats)) return toast('That file is not a RUVET backup');
+  // Restoring replaces the chat a run is writing into; it has to wait.
+  if (running) return toast('Stop the current run first');
   const chats = d.chats.map(cleanChat).filter(Boolean);
   Object.assign(memory, cleanMemory(d.memory)); saveMemory();
   library = cleanLibrary(d.library); saveLibrary();
@@ -1586,8 +1666,8 @@ function syncControls() {
     + (prefs.mode === 'audit' ? '<button class="chip alt" data-local>check locally — free</button>' : '');
   $('targets').innerHTML = TARGETS.map((t) => `<button class="chip" data-target="${t.id}" aria-pressed="${prefs.targets.includes(t.id)}">${esc(t.label)}</button>`).join('');
   $('toggles').innerHTML = `<button class="chip alt" data-toggle="full" aria-pressed="${prefs.full}">critic + auto-fix</button><button class="chip alt" data-toggle="compact" aria-pressed="${prefs.compact}">compact output</button>`;
-  $('cast').innerHTML = kit.chars.map((c) => `<button class="chip" data-char="${c.id}" aria-pressed="${prefs.chars.includes(c.id)}">${esc(c.name)}</button>`).join('')
-    + kit.loras.map((l) => `<button class="chip alt" data-lora="${l.id}" aria-pressed="${prefs.loras.includes(l.id)}">LoRA: ${esc(l.name)}</button>`).join('')
+  $('cast').innerHTML = kit.chars.map((c) => `<button class="chip" data-char="${esc(c.id)}" aria-pressed="${prefs.chars.includes(c.id)}">${esc(c.name)}</button>`).join('')
+    + kit.loras.map((l) => `<button class="chip alt" data-lora="${esc(l.id)}" aria-pressed="${prefs.loras.includes(l.id)}">LoRA: ${esc(l.name)}</button>`).join('')
     || '<span class="lbl">None saved yet — add characters and LoRAs in the Kit tab.</span>';
   $('input').placeholder = MODES.find((m) => m.id === prefs.mode)?.hint ?? '';
   $('variantsWrap').hidden = prefs.mode !== 'variants';
@@ -1634,15 +1714,29 @@ const imageFail = (e) => toast(e?.user ? e.message : 'Could not read the image')
 const NO_IMAGES = 'Images cannot be sent to Claude in this view. Prompts embedded in PNGs are still read. To send images, open RUVET in a browser on claude.ai, or use the web app.';
 function setImage(img) { pendingImage = img; $('attach').hidden = !img; if (img) $('attach').querySelector('img').src = `data:${img.media_type};base64,${img.data}`; }
 async function renderChats() {
-  const all = (await idb('readonly', (s) => s.getAll()).catch(() => [])).sort((a, b) => b.updated - a.updated);
+  const all = (await idb('readonly', (s) => s.getAll()).catch(() => [])).filter((c) => isObj(c) && safeId(c.id)).sort((a, b) => (+b.updated || 0) - (+a.updated || 0));
   $('chats').innerHTML = all.length ? all.map((c) =>
-    `<li class="${c.id === chat.id ? 'cur' : ''}"><button class="open" data-id="${c.id}">${esc(c.title || 'Untitled')}<small>${new Date(c.updated).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</small></button>`
-    + (armed.has('chat' + c.id) ? `<button class="x sure" data-del="${c.id}">Delete?</button>`
-      : `<button class="icon" data-del="${c.id}" aria-label="Delete"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button>`) + '</li>').join('')
+    `<li class="${c.id === chat.id ? 'cur' : ''}"><button class="open" data-id="${esc(c.id)}">${esc(c.title || 'Untitled')}<small>${new Date(c.updated).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</small></button>`
+    + (armed.has('chat' + c.id) ? `<button class="x sure" data-del="${esc(c.id)}">Delete?</button>`
+      : `<button class="icon" data-del="${esc(c.id)}" aria-label="Delete"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button>`) + '</li>').join('')
     : '<li class="none" style="padding:10px 8px;text-align:left">No saved chats yet.</li>';
 }
-async function openDrawer() { await renderChats(); $('drawer').classList.add('open'); $('scrim').hidden = false; }
-function closeDrawer() { armed.clear(); $('drawer').classList.remove('open'); $('scrim').hidden = true; }
+async function openChat(id) {
+  const c = cleanChat(await idb('readonly', (s) => s.get(id)).catch(() => null));
+  if (c) { c.seen = c.updated; chat = c; setView('studio'); renderThread(); } else toast('That chat could not be read');
+  return !!c;
+}
+// On a phone the closed drawer is only moved off screen; `inert` keeps the keyboard and screen readers out of it.
+const wide = matchMedia('(min-width: 900px)');
+const syncDrawer = () => { $('drawer').inert = !wide.matches && !$('drawer').classList.contains('open'); };
+async function openDrawer() { await renderChats(); $('drawer').classList.add('open'); $('scrim').hidden = false; syncDrawer(); $('drawer').querySelector('button')?.focus(); }
+function closeDrawer() { const was = $('drawer').classList.contains('open'); armed.clear(); $('drawer').classList.remove('open'); $('scrim').hidden = true; syncDrawer(); if (was && !wide.matches) $('menuBtn').focus(); }
+wide.addEventListener('change', syncDrawer); syncDrawer();
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('drawer').classList.contains('open') && !wide.matches) closeDrawer();
+  // Labels that act as buttons (they open a file picker) answer to Enter and Space like buttons do.
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('label[role="button"]')) { e.preventDefault(); e.target.click(); }
+});
 function openSettings() {
   $('setFields').innerHTML = (backend.about ? `<p class="about">${esc(backend.about)}</p>` : '') + backend.fields.map((f) => `<label class="field">${esc(f.label)}${f.type === 'select'
     ? `<select id="f-${f.id}">${f.options.map(([v, l]) => `<option value="${v}"${cfg[f.id] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`
@@ -1675,7 +1769,11 @@ const desktop = matchMedia('(hover: hover) and (pointer: fine)');
 $('input').addEventListener('input', autosize);
 $('input').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || e.isComposing) return;
-  if (e.ctrlKey || e.metaKey || (desktop.matches && !e.shiftKey)) { e.preventDefault(); send(); }
+  if (e.ctrlKey || e.metaKey || (desktop.matches && !e.shiftKey)) {
+    e.preventDefault();
+    // Only the button stops a run. Enter while one is going would cancel it by accident.
+    if (running) toast('Still working — tap the stop button to cancel'); else send();
+  }
 });
 $('input').addEventListener('paste', async (e) => {
   const f = [...(e.clipboardData?.files ?? [])].find((x) => x.type.startsWith('image/'));
@@ -1704,13 +1802,17 @@ async function readPngPrompt(file) {
     p += 12 + len;
   }
   if (text.parameters) {
-    const m = text.parameters.match(/^([\s\S]*?)(?:\nNegative prompt: ([\s\S]*?))?(?:\n(Steps: [^\n]*))?$/);
-    return m ? `positive: ${m[1].trim()}${m[2] ? `\nnegative: ${m[2].trim()}` : ''}${m[3] ? `\nsettings: ${m[3].trim()}` : ''}` : text.parameters.trim();
+    // Plain string search, not one regex over the whole chunk: a crafted file made that regex run for minutes.
+    const t = text.parameters.slice(0, 200000); let body = t, settings = '';
+    const last = t.lastIndexOf('\n');
+    if (last >= 0 && t.startsWith('Steps: ', last + 1)) { settings = t.slice(last + 1).trim(); body = t.slice(0, last); }
+    const n = body.indexOf('\nNegative prompt: '), pos = (n >= 0 ? body.slice(0, n) : body).trim(), neg = n >= 0 ? body.slice(n + 18).trim() : '';
+    return `positive: ${pos}${neg ? `\nnegative: ${neg}` : ''}${settings ? `\nsettings: ${settings}` : ''}`;
   }
   if (text.prompt) {
     try {
       const texts = Object.values(JSON.parse(text.prompt)).filter((n) => /CLIPTextEncode/.test(n.class_type ?? '') && typeof n.inputs?.text === 'string' && n.inputs.text.trim()).map((n) => n.inputs.text.trim());
-      if (texts.length) return texts.map((t, i) => `prompt ${i + 1}: ${t}`).join('\n');
+      if (texts.length) return texts.map((t, i) => `prompt ${i + 1}: ${t}`).join('\n').slice(0, 200000);
     } catch { /* not a ComfyUI graph */ }
   }
   return null;
@@ -1741,7 +1843,6 @@ function watchPicker(input) {
   }, 1800);
 }
 $('imgBtn').addEventListener('click', () => watchPicker($('file')));
-$('imgBtn').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } });
 $('file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) attachFile(f); });
 $('reviewFile').addEventListener('change', async (e) => {
   const f = e.target.files[0]; e.target.value = ''; if (!f || !reviewFor) return;
@@ -1789,13 +1890,13 @@ thread.addEventListener('click', (e) => {
   else if (act === 'save') saveToLibrary(b.pos, b.neg, run, target);
   else if (act === 'critic') runCritic(run, target);
   else if (act === 'fixlint') {
-    send({ text: `Fix only these findings in the prompt below; change nothing else and do not add anything.\n${out.lint.items.filter((i) => i.lv !== 'info').map((i) => `- ${i.m}`).join('\n')}\n\npositive: ${b.pos}${b.neg ? `\nnegative: ${b.neg}` : ''}`, image: null, meta: { mode: 'audit', targets: [target] } });
+    send({ text: `Fix only these findings in the prompt below; change nothing else and do not add anything.\n${out.lint.items.filter((i) => i.lv !== 'info').map((i) => `- ${i.m}`).join('\n')}\n\npositive: ${b.pos}${b.neg ? `\nnegative: ${b.neg}` : ''}`, image: null, meta: { mode: 'audit', targets: [target], cast: run.meta.cast ?? [], loras: run.meta.loras ?? [] } });
   }
   // A label for the file input: the browser opens the picker itself, which some app web views allow where a scripted click is ignored.
   else if (act === 'review') { if (!caps.images) { e.preventDefault(); return toast(NO_IMAGES); } reviewFor = { run, target }; watchPicker($('reviewFile')); }
   else if (act === 'rrepair') {
     const v = out.review;
-    send({ text: `The render failed${v.issues.length ? `: ${v.issues.join(', ')}` : ''}.${v.note ? ` ${v.note}` : ''} The attached image is the failed render.`, image: v.image, meta: { mode: 'repair', targets: [target] } });
+    send({ text: `The render failed${v.issues.length ? `: ${v.issues.join(', ')}` : ''}.${v.note ? ` ${v.note}` : ''} The attached image is the failed render.`, image: v.image, meta: { mode: 'repair', targets: [target], cast: run.meta.cast ?? [], loras: run.meta.loras ?? [] } });
   }
   else if (act === 'worked') { run.fbOpen = null; recordFeedback(run, target, 'worked', [], ''); paint(run); }
   else if (act === 'failed') { run.fbOpen = run.fbOpen === target ? null : target; paint(run); }
@@ -1843,7 +1944,7 @@ $('memory').addEventListener('click', async (e) => {
     if (a === 'style') await learnStyle();
     else if (a === 'learn') await learnLessons(target);
     else if (a === 'dellesson') { memory.lessons[target].splice(+btn.dataset.i, 1); saveMemory(); }
-    else if (a === 'addlesson') { const v = e.target.closest('.panel').querySelector('[data-newlesson]').value.trim(); if (!v) return; (memory.lessons[target] ??= []).push(v); saveMemory(); }
+    else if (a === 'addlesson') { const v = e.target.closest('.panel').querySelector('[data-newlesson]').value.trim(); if (!v) return; if ((memory.lessons[target]?.length ?? 0) >= 20) return toast('Twenty lessons is the limit; remove one first'); (memory.lessons[target] ??= []).push(oneLine(v)); saveMemory(); }
     else if (a === 'delfb') { memory.feedback = memory.feedback.filter((f) => f.id !== btn.dataset.id); saveMemory(); }
     else if (a === 'backup') await makeBackup();
     else if (a === 'restore') { if (confirmTap('restore')) $('restoreFile').click(); }
@@ -1859,16 +1960,17 @@ $('newBtn').addEventListener('click', () => { if (running) return toast('Stop th
 $('chats').addEventListener('click', async (e) => {
   const del = e.target.closest('[data-del]');
   if (del) {
+    // The open chat is saved again when its run ends, so deleting it mid-run would only bring it back.
+    if (del.dataset.del === chat.id && running) return toast('Stop the current run first');
     if (confirmTap('chat' + del.dataset.del)) {
       await idb('readwrite', (s) => s.delete(del.dataset.del)).catch(() => {});
-      if (del.dataset.del === chat.id && !running) { chat = newChat(); renderThread(); }
+      if (del.dataset.del === chat.id) { chat = newChat(); renderThread(); }
     }
     return renderChats();
   }
   const open = e.target.closest('[data-id]'); if (!open) return;
   if (running) return toast('Stop the current run first');
-  const c = cleanChat(await idb('readonly', (s) => s.get(open.dataset.id)).catch(() => null));
-  if (c) { chat = c; setView('studio'); renderThread(); } else toast('That chat could not be read');
+  await openChat(open.dataset.id);
   closeDrawer(); renderChats();
 });
 $('setBtn').addEventListener('click', openSettings);
@@ -1886,6 +1988,19 @@ $('wipeBtn').addEventListener('click', async () => {
   location.reload();
 });
 
+// Other tabs: pick up their changes to memory, library and kit instead of overwriting them with this tab's older copy.
+window.addEventListener('storage', (e) => {
+  if (e.key === 'ruvet.memory') Object.assign(memory, cleanMemory(store.get('ruvet.memory', {})));
+  else if (e.key === 'ruvet.library') library = cleanLibrary(store.get('ruvet.library', []));
+  else if (e.key === 'ruvet.kit') { Object.assign(kit, cleanKit(store.get('ruvet.kit', {}))); syncControls(); }
+  else return;
+  const v = document.body.dataset.view;
+  if (v === 'library' && !document.activeElement?.closest?.('#library')) renderLibrary();
+  if (v === 'kit' && !document.activeElement?.closest?.('#kit')) renderKit();
+  if (v === 'memory' && !document.activeElement?.closest?.('#memory')) renderMemory();
+  renderNav();
+});
+if (peers) peers.onmessage = () => renderChats();
 syncControls(); setView('studio'); renderThread(); renderChats();
 if (desktop.matches) $('input').focus();
 capsReady.then((c) => { if (c?.off && !chat.runs.length) renderThread(); });
@@ -1938,10 +2053,12 @@ capsReady.then((c) => { if (c?.off && !chat.runs.length) renderThread(); });
       if (signal) opts.signal = signal;
       const last = turns[turns.length - 1];
       if (last?.image) opts.images = toBlob(last.image);
-      const res = await sample([{ role: 'user', content: rules }, ...rest], opts);
+      let res;
+      try { res = await sample([{ role: 'user', content: rules }, ...rest], opts); }
+      catch (e) { if (e?.code === 'prompt_too_large' && rest.length === 1) e.single = true; throw e; }
       return { text: res.text, truncated: res.truncated };
     },
-    describeError: (e) => (e?.code === 'cancelled' ? null : ERRORS[e?.code] ?? (e?.code ? ERRORS.upstream_error : e?.message || ERRORS.upstream_error)),
+    describeError: (e) => (e?.code === 'cancelled' ? null : e?.code === 'prompt_too_large' && e.single ? 'That message is too long for this view; shorten it.' : ERRORS[e?.code] ?? (e?.code ? ERRORS.upstream_error : e?.message || ERRORS.upstream_error)),
   });
 })();
 
