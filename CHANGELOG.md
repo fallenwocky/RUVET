@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed (prompt fidelity, from the first real renders)
+- The first real runs dropped things the user had asked for: a courier "eating instant noodles" became a figure seen from behind holding a cup, an audit deleted the sunbeams the prompt asked for and added a stream. The core prompt now treats every element the user states as kept and visible; a risk fix or a banned-effect rule can no longer remove one, a back view has to be earned by the concept, and an audit adds nothing the original did not contain.
+- The critic now receives the user's request and checks the prompt against it first (missing, replaced, reduced or hidden elements).
+- Not yet measured with the Test view; these rules are judged by the next real runs.
+
 ### Fixed (found by the stress suite)
 - An empty reply from Claude left the web app showing "Thinking…" forever; the run now ends and the text goes back to the composer.
 - A double tap on Send cancelled the run it had just started (the button doubles as Stop); taps within 0.8 s of starting are ignored.

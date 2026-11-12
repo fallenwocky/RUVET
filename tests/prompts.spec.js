@@ -42,3 +42,13 @@ test('the critic audits economy and answers with a verdict the app can read', ()
   expect(c).toContain('10 ECONOMY');
   expect(c).toContain('**Verdict:** PASS | FIX | REJECT');
 });
+
+test('the core and the critic hold the user\'s stated elements above fixes and bans', () => {
+  const part = (n) => fs.readFileSync(path.join(__dirname, '..', 'docs', 'prompts', 'sapphire', n + '.txt'), 'utf8');
+  const core = part('core'), critic = part('critic');
+  expect(core).toMatch(/P1 FIDELITY[^\n]*Every stated element is in the prompt/);
+  expect(core).toMatch(/A fix never crops out, turns away or parks a stated element/);
+  expect(core).toMatch(/Banned unless motivated, DNA or stated by the user/);
+  expect(core).toMatch(/M3 — no new scene: the corrected prompt contains nothing the original did not/);
+  expect(critic).toMatch(/0 FIDELITY \(only with a User's request\)/);
+});

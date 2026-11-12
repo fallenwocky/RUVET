@@ -29,6 +29,8 @@ for (const kind of ['web', 'artifact']) {
       const c = compiles(app.calls);
       expect(c).toHaveLength(2);
       expect(critics(app.calls)).toHaveLength(2);
+      // The critic is told what was asked for, so it can catch a dropped element.
+      for (const k of critics(app.calls)) expect(k.user).toContain('<request>\nAn old repairman fixing a carousel\n</request>');
       const tsubaki = c.find((x) => x.user.includes('model: tsubaki3')), tag = c.find((x) => x.user.includes('model: illustrious'));
       expect(tsubaki.system).toContain('TSUBAKI BUILD');
       expect(tsubaki.system).toContain('<pack id="DESCRIPTION"');
